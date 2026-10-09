@@ -40,7 +40,6 @@
 	<ItemGroup>
 	  <Folder Include="bin\Debug\net8.0\" />
 	  <Folder Include="Controllers\" />
-	  <Folder Include="Data\Configurations\" />
 	  <Folder Include="DTOs\" />
 	  <Folder Include="Middleware\" />
 	  <Folder Include="obj\Debug\net8.0\refint\" />
