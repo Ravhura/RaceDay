@@ -10,6 +10,19 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+	  <Compile Include="obj\Debug\net8.0\.NETCoreApp,Version=v8.0.AssemblyAttributes.cs" />
+	  <Compile Include="obj\Debug\net8.0\RaceDay.Api.AssemblyInfo.cs" />
+	  <Compile Include="obj\Debug\net8.0\RaceDay.Api.GlobalUsings.g.cs" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Content Include="obj\Debug\net8.0\rpswa.dswa.cache.json" />
+	  <Content Include="obj\Debug\net8.0\staticwebassets.removed.txt" />
+	  <Content Include="obj\project.assets.json" />
+	  <Content Include="obj\RaceDay.Api.csproj.nuget.dgspec.json" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.11" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.11">
 			<PrivateAssets>all</PrivateAssets>
@@ -22,6 +35,29 @@
 		<!-- Provides PasswordHasher<T> only. No Identity tables are created. -->
 		<PackageReference Include="Microsoft.Extensions.Identity.Core" Version="8.0.11" />
 		<PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Folder Include="bin\Debug\net8.0\" />
+	  <Folder Include="Controllers\" />
+	  <Folder Include="Data\Configurations\" />
+	  <Folder Include="DTOs\" />
+	  <Folder Include="Middleware\" />
+	  <Folder Include="Models\" />
+	  <Folder Include="obj\Debug\net8.0\refint\" />
+	  <Folder Include="obj\Debug\net8.0\ref\" />
+	  <Folder Include="obj\Debug\net8.0\staticwebassets\" />
+	  <Folder Include="Services\" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Include="obj\Debug\net8.0\RaceDay.Api.AssemblyInfoInputs.cache" />
+	  <None Include="obj\Debug\net8.0\RaceDay.Api.assets.cache" />
+	  <None Include="obj\Debug\net8.0\RaceDay.Api.csproj.AssemblyReference.cache" />
+	  <None Include="obj\Debug\net8.0\RaceDay.Api.GeneratedMSBuildEditorConfig.editorconfig" />
+	  <None Include="obj\project.nuget.cache" />
+	  <None Include="obj\RaceDay.Api.csproj.nuget.g.props" />
+	  <None Include="obj\RaceDay.Api.csproj.nuget.g.targets" />
 	</ItemGroup>
 
 </Project>
