@@ -1,174 +1,192 @@
-﻿using System.Net;
-using System.Net.Http.Json;
-using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using RaceDay.Api.Data;
-using RaceDay.Api.Models;
+﻿using RaceDay.Api.Authentication;
+using RaceDay.Api.DTOs;
 
 namespace RaceDay.Tests;
 
-public class EnrolmentTests : IClassFixture<RaceDayFactory>
+/// <summary>Participants enrol. The enrolment is recorded correctly, and bad requests are rejected.</summary>
+public class EnrolmentTests
 {
-    private readonly RaceDayFactory _factory;
-
-    public EnrolmentTests(RaceDayFactory factory) => _factory = factory;
-
     [Fact]
     public async Task Participant_CanEnrol_AndTheEnrolmentRecordsParticipantEventAndCategory()
     {
-        var organiser = await TestApi.NewOrganiserAsync(_factory);
-        var participant = await TestApi.NewParticipantAsync(_factory);
-        var eventId = await TestApi.CreateEventAsync(organiser.Client);
-        var categoryId = await TestApi.CreateCategoryAsync(organiser.Client, eventId);
+        using var db = TestHelper.NewDb();
+        var organiser = TestHelper.AddOrganiser(db);
+        var participant = TestHelper.AddParticipant(db);
+        var ev = TestHelper.AddEvent(db, organiser.OrganiserId);
+        var category = TestHelper.AddCategory(db, ev.EventId);
+        var controller = TestHelper.Enrolments(db, participant.ParticipantId, Roles.Participant);
 
-        var response = await participant.Client.PostAsJsonAsync("/api/enrolments", new { eventId, categoryId });
+        var result = await controller.CreateEnrolment(new CreateEnrolmentRequest { EventId = ev.EventId, CategoryId = category.CategoryId });
 
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        var json = await response.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal(participant.Id, json.GetProperty("participantId").GetInt32()); // from the session
-        Assert.Equal(eventId, json.GetProperty("eventId").GetInt32());
-        Assert.Equal(categoryId, json.GetProperty("categoryId").GetInt32());
-        Assert.Equal("Confirmed", json.GetProperty("status").GetString());
+        Assert.Equal(201, TestHelper.StatusOf(result));
+        var saved = Assert.Single(db.Enrolments);
+        Assert.Equal(participant.ParticipantId, saved.ParticipantId); // taken from the session
+        Assert.Equal(ev.EventId, saved.EventId);
+        Assert.Equal(category.CategoryId, saved.CategoryId);
+        Assert.Equal("Confirmed", saved.Status);
     }
 
     [Fact]
     public async Task Organiser_CannotEnrol_Returns403()
     {
-        var organiser = await TestApi.NewOrganiserAsync(_factory);
-        var eventId = await TestApi.CreateEventAsync(organiser.Client);
-        var categoryId = await TestApi.CreateCategoryAsync(organiser.Client, eventId);
+        using var db = TestHelper.NewDb();
+        var organiser = TestHelper.AddOrganiser(db);
+        var ev = TestHelper.AddEvent(db, organiser.OrganiserId);
+        var category = TestHelper.AddCategory(db, ev.EventId);
+        var controller = TestHelper.Enrolments(db, organiser.OrganiserId, Roles.Organiser);
 
-        var response = await organiser.Client.PostAsJsonAsync("/api/enrolments", new { eventId, categoryId });
+        var result = await controller.CreateEnrolment(new CreateEnrolmentRequest { EventId = ev.EventId, CategoryId = category.CategoryId });
 
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(403, TestHelper.StatusOf(result));
+        Assert.Empty(db.Enrolments);
     }
 
     [Fact]
-    public async Task Enrol_WithCategoryFromADifferentEvent_Returns400()
+    public async Task Enrol_WithACategoryFromADifferentEvent_Returns400()
     {
-        var organiser = await TestApi.NewOrganiserAsync(_factory);
-        var participant = await TestApi.NewParticipantAsync(_factory);
-        var eventA = await TestApi.CreateEventAsync(organiser.Client);
-        var eventB = await TestApi.CreateEventAsync(organiser.Client);
-        var categoryOfB = await TestApi.CreateCategoryAsync(organiser.Client, eventB);
+        using var db = TestHelper.NewDb();
+        var organiser = TestHelper.AddOrganiser(db);
+        var participant = TestHelper.AddParticipant(db);
+        var eventA = TestHelper.AddEvent(db, organiser.OrganiserId, "Event A");
+        var eventB = TestHelper.AddEvent(db, organiser.OrganiserId, "Event B");
+        var categoryOfB = TestHelper.AddCategory(db, eventB.EventId);
+        var controller = TestHelper.Enrolments(db, participant.ParticipantId, Roles.Participant);
 
-        var response = await participant.Client.PostAsJsonAsync("/api/enrolments",
-            new { eventId = eventA, categoryId = categoryOfB });
+        var result = await controller.CreateEnrolment(new CreateEnrolmentRequest { EventId = eventA.EventId, CategoryId = categoryOfB.CategoryId });
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(400, TestHelper.StatusOf(result));
+        Assert.Empty(db.Enrolments);
     }
 
     [Fact]
     public async Task Enrol_Twice_InTheSameEventAndCategory_Returns409()
     {
-        var scenario = await TestApi.NewEnrolmentScenarioAsync(_factory);
+        using var db = TestHelper.NewDb();
+        var s = TestHelper.NewScenario(db);
+        var controller = TestHelper.Enrolments(db, s.Participant.ParticipantId, Roles.Participant);
 
-        var second = await scenario.Participant.Client.PostAsJsonAsync("/api/enrolments",
-            new { eventId = scenario.EventId, categoryId = scenario.CategoryId });
+        var second = await controller.CreateEnrolment(new CreateEnrolmentRequest { EventId = s.Event.EventId, CategoryId = s.Category.CategoryId });
 
-        Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+        Assert.Equal(409, TestHelper.StatusOf(second));
+        Assert.Single(db.Enrolments);
     }
 
     [Fact]
-    public async Task Enrol_InMissingEventOrCategory_Returns404()
+    public async Task Enrol_InAMissingEventOrCategory_Returns404()
     {
-        var organiser = await TestApi.NewOrganiserAsync(_factory);
-        var participant = await TestApi.NewParticipantAsync(_factory);
-        var eventId = await TestApi.CreateEventAsync(organiser.Client);
+        using var db = TestHelper.NewDb();
+        var organiser = TestHelper.AddOrganiser(db);
+        var participant = TestHelper.AddParticipant(db);
+        var ev = TestHelper.AddEvent(db, organiser.OrganiserId);
+        var category = TestHelper.AddCategory(db, ev.EventId);
+        var controller = TestHelper.Enrolments(db, participant.ParticipantId, Roles.Participant);
 
-        var missingEvent = await participant.Client.PostAsJsonAsync("/api/enrolments", new { eventId = 999999, categoryId = 1 });
-        var missingCategory = await participant.Client.PostAsJsonAsync("/api/enrolments", new { eventId, categoryId = 999999 });
+        var missingEvent = await controller.CreateEnrolment(new CreateEnrolmentRequest { EventId = 999, CategoryId = category.CategoryId });
+        var missingCategory = await controller.CreateEnrolment(new CreateEnrolmentRequest { EventId = ev.EventId, CategoryId = 999 });
 
-        Assert.Equal(HttpStatusCode.NotFound, missingEvent.StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, missingCategory.StatusCode);
+        Assert.Equal(404, TestHelper.StatusOf(missingEvent));
+        Assert.Equal(404, TestHelper.StatusOf(missingCategory));
     }
 
     [Fact]
     public async Task Participant_CanListOwnEnrolments_ButNotAnothersList()
     {
-        var scenario = await TestApi.NewEnrolmentScenarioAsync(_factory);
-        var stranger = await TestApi.NewParticipantAsync(_factory);
+        using var db = TestHelper.NewDb();
+        var s = TestHelper.NewScenario(db);
+        var stranger = TestHelper.AddParticipant(db, "stranger@test.com");
 
-        var own = await scenario.Participant.Client.GetFromJsonAsync<JsonElement>($"/api/participants/{scenario.Participant.Id}/enrolments");
-        Assert.Contains(own.EnumerateArray(), e => e.GetProperty("enrolmentId").GetInt32() == scenario.EnrolmentId);
+        var own = await TestHelper.Enrolments(db, s.Participant.ParticipantId, Roles.Participant)
+            .GetParticipantEnrolments(s.Participant.ParticipantId);
+        var notOwn = await TestHelper.Enrolments(db, stranger.ParticipantId, Roles.Participant)
+            .GetParticipantEnrolments(s.Participant.ParticipantId);
 
-        var other = await stranger.Client.GetAsync($"/api/participants/{scenario.Participant.Id}/enrolments");
-        Assert.Equal(HttpStatusCode.Forbidden, other.StatusCode);
+        Assert.Equal(200, TestHelper.StatusOf(own));
+        var list = TestHelper.ValueOf<List<EnrolmentResponse>>(own);
+        Assert.Single(list);
+        Assert.Equal(s.Enrolment.EnrolmentId, list[0].EnrolmentId);
+        Assert.Equal(403, TestHelper.StatusOf(notOwn));
     }
 
     [Fact]
-    public async Task Participant_CannotViewAnotherParticipantsEnrolment_Returns403()
+    public async Task OnlyTheOwnerOrTheManagingOrganiser_CanViewAnEnrolment()
     {
-        var scenario = await TestApi.NewEnrolmentScenarioAsync(_factory);
-        var stranger = await TestApi.NewParticipantAsync(_factory);
+        using var db = TestHelper.NewDb();
+        var s = TestHelper.NewScenario(db);
+        var strangerParticipant = TestHelper.AddParticipant(db, "stranger@test.com");
+        var unrelatedOrganiser = TestHelper.AddOrganiser(db, "unrelated@test.com");
+        int id = s.Enrolment.EnrolmentId;
 
-        var owner = await scenario.Participant.Client.GetAsync($"/api/enrolments/{scenario.EnrolmentId}");
-        var other = await stranger.Client.GetAsync($"/api/enrolments/{scenario.EnrolmentId}");
+        var byOwner = await TestHelper.Enrolments(db, s.Participant.ParticipantId, Roles.Participant).GetEnrolment(id);
+        var byOrganiser = await TestHelper.Enrolments(db, s.Organiser.OrganiserId, Roles.Organiser).GetEnrolment(id);
+        var byStranger = await TestHelper.Enrolments(db, strangerParticipant.ParticipantId, Roles.Participant).GetEnrolment(id);
+        var byUnrelated = await TestHelper.Enrolments(db, unrelatedOrganiser.OrganiserId, Roles.Organiser).GetEnrolment(id);
 
-        Assert.Equal(HttpStatusCode.OK, owner.StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, other.StatusCode);
+        Assert.Equal(200, TestHelper.StatusOf(byOwner));
+        Assert.Equal(200, TestHelper.StatusOf(byOrganiser));
+        Assert.Equal(403, TestHelper.StatusOf(byStranger));
+        Assert.Equal(403, TestHelper.StatusOf(byUnrelated));
     }
 
     [Fact]
     public async Task Organiser_CanViewEnrolmentsForOwnEvent_AndSeesTheParticipant()
     {
-        var scenario = await TestApi.NewEnrolmentScenarioAsync(_factory);
+        using var db = TestHelper.NewDb();
+        var s = TestHelper.NewScenario(db);
+        var controller = TestHelper.Enrolments(db, s.Organiser.OrganiserId, Roles.Organiser);
 
-        var byEvent = await scenario.Organiser.Client.GetFromJsonAsync<JsonElement>($"/api/events/{scenario.EventId}/enrolments");
-        Assert.Contains(byEvent.EnumerateArray(), e =>
-            e.GetProperty("enrolmentId").GetInt32() == scenario.EnrolmentId &&
-            e.GetProperty("participantId").GetInt32() == scenario.Participant.Id);
+        var byEvent = await controller.GetEventEnrolments(s.Event.EventId);
+        var byOrganiser = await controller.GetOrganiserEnrolments(s.Organiser.OrganiserId);
 
-        var byOrganiser = await scenario.Organiser.Client.GetFromJsonAsync<JsonElement>($"/api/organisers/{scenario.Organiser.Id}/enrolments");
-        Assert.Contains(byOrganiser.EnumerateArray(), e => e.GetProperty("enrolmentId").GetInt32() == scenario.EnrolmentId);
-
-        var single = await scenario.Organiser.Client.GetAsync($"/api/enrolments/{scenario.EnrolmentId}");
-        Assert.Equal(HttpStatusCode.OK, single.StatusCode);
+        Assert.Equal(200, TestHelper.StatusOf(byEvent));
+        var list = TestHelper.ValueOf<List<EnrolmentResponse>>(byEvent);
+        Assert.Single(list);
+        Assert.Equal(s.Participant.ParticipantId, list[0].ParticipantId);
+        Assert.Equal(200, TestHelper.StatusOf(byOrganiser));
+        Assert.Single(TestHelper.ValueOf<List<EnrolmentResponse>>(byOrganiser));
     }
 
     [Fact]
     public async Task Organiser_CannotViewEnrolmentsOfAnUnrelatedEvent_Returns403()
     {
-        var scenario = await TestApi.NewEnrolmentScenarioAsync(_factory);
-        var unrelated = await TestApi.NewOrganiserAsync(_factory);
+        using var db = TestHelper.NewDb();
+        var s = TestHelper.NewScenario(db);
+        var unrelated = TestHelper.AddOrganiser(db, "unrelated@test.com");
+        var controller = TestHelper.Enrolments(db, unrelated.OrganiserId, Roles.Organiser);
 
-        var byEvent = await unrelated.Client.GetAsync($"/api/events/{scenario.EventId}/enrolments");
-        var single = await unrelated.Client.GetAsync($"/api/enrolments/{scenario.EnrolmentId}");
-        var byOrganiser = await unrelated.Client.GetAsync($"/api/organisers/{scenario.Organiser.Id}/enrolments");
+        var byEvent = await controller.GetEventEnrolments(s.Event.EventId);
+        var byOrganiser = await controller.GetOrganiserEnrolments(s.Organiser.OrganiserId);
 
-        Assert.Equal(HttpStatusCode.Forbidden, byEvent.StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, single.StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, byOrganiser.StatusCode);
+        Assert.Equal(403, TestHelper.StatusOf(byEvent));
+        Assert.Equal(403, TestHelper.StatusOf(byOrganiser));
     }
 
     [Fact]
     public async Task Participant_CanCancelOwnEnrolment_ButNotAnothers()
     {
-        var scenario = await TestApi.NewEnrolmentScenarioAsync(_factory);
-        var stranger = await TestApi.NewParticipantAsync(_factory);
+        using var db = TestHelper.NewDb();
+        var s = TestHelper.NewScenario(db);
+        var stranger = TestHelper.AddParticipant(db, "stranger@test.com");
 
-        var byStranger = await stranger.Client.DeleteAsync($"/api/enrolments/{scenario.EnrolmentId}");
-        Assert.Equal(HttpStatusCode.Forbidden, byStranger.StatusCode);
+        var byStranger = await TestHelper.Enrolments(db, stranger.ParticipantId, Roles.Participant).DeleteEnrolment(s.Enrolment.EnrolmentId);
+        Assert.Equal(403, TestHelper.StatusOf(byStranger));
+        Assert.Single(db.Enrolments);
 
-        var byOwner = await scenario.Participant.Client.DeleteAsync($"/api/enrolments/{scenario.EnrolmentId}");
-        Assert.Equal(HttpStatusCode.NoContent, byOwner.StatusCode);
+        var byOwner = await TestHelper.Enrolments(db, s.Participant.ParticipantId, Roles.Participant).DeleteEnrolment(s.Enrolment.EnrolmentId);
+        Assert.Equal(204, TestHelper.StatusOf(byOwner));
+        Assert.Empty(db.Enrolments);
     }
 
     [Fact]
-    public async Task Database_RejectsAnEnrolmentWhoseCategoryBelongsToAnotherEvent()
+    public async Task Participant_CannotCancelAnEnrolment_OnceAResultExists_Returns409()
     {
-        // Proves the Part 1 composite foreign key (EventId, CategoryId) works even if the service check is bypassed.
-        var organiser = await TestApi.NewOrganiserAsync(_factory);
-        var participant = await TestApi.NewParticipantAsync(_factory);
-        var eventA = await TestApi.CreateEventAsync(organiser.Client);
-        var eventB = await TestApi.CreateEventAsync(organiser.Client);
-        var categoryOfB = await TestApi.CreateCategoryAsync(organiser.Client, eventB);
+        using var db = TestHelper.NewDb();
+        var s = TestHelper.NewScenario(db);
+        TestHelper.AddResult(db, s.Enrolment.EnrolmentId);
+        var controller = TestHelper.Enrolments(db, s.Participant.ParticipantId, Roles.Participant);
 
-        using var scope = _factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<RaceDayDbContext>();
-        db.Enrolments.Add(new Enrolment { ParticipantId = participant.Id, EventId = eventA, CategoryId = categoryOfB });
+        var result = await controller.DeleteEnrolment(s.Enrolment.EnrolmentId);
 
-        await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        Assert.Equal(409, TestHelper.StatusOf(result));
+        Assert.Single(db.Enrolments);
     }
 }

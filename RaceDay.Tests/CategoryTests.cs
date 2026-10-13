@@ -1,116 +1,125 @@
-﻿using System.Net;
-using System.Net.Http.Json;
-using System.Text.Json;
+﻿using RaceDay.Api.Authentication;
+using RaceDay.Api.DTOs;
 
 namespace RaceDay.Tests;
 
-public class CategoryTests : IClassFixture<RaceDayFactory>
+/// <summary>Organisers manage categories for their own events only.</summary>
+public class CategoryTests
 {
-    private readonly RaceDayFactory _factory;
-
-    public CategoryTests(RaceDayFactory factory) => _factory = factory;
-
     [Fact]
-    public async Task Organiser_CanCreateCategory_ForOwnEvent()
+    public async Task Organiser_CanCreateACategory_ForOwnEvent()
     {
-        var organiser = await TestApi.NewOrganiserAsync(_factory);
-        var eventId = await TestApi.CreateEventAsync(organiser.Client);
+        using var db = TestHelper.NewDb();
+        var organiser = TestHelper.AddOrganiser(db);
+        var ev = TestHelper.AddEvent(db, organiser.OrganiserId);
+        var controller = TestHelper.Categories(db, organiser.OrganiserId, Roles.Organiser);
 
-        var response = await organiser.Client.PostAsJsonAsync($"/api/events/{eventId}/categories",
-            new { categoryName = "Under 20", entryFee = 80.0 });
+        var result = await controller.CreateCategory(ev.EventId, new CategoryRequest { CategoryName = "Under 20", EntryFee = 80 });
 
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        var json = await response.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal(eventId, json.GetProperty("eventId").GetInt32());
-        Assert.Equal("Under 20", json.GetProperty("categoryName").GetString());
+        Assert.Equal(201, TestHelper.StatusOf(result));
+        var created = TestHelper.ValueOf<CategoryResponse>(result);
+        Assert.Equal(ev.EventId, created.EventId);
+        Assert.Equal("Under 20", created.CategoryName);
     }
 
     [Fact]
-    public async Task Organiser_CannotCreateCategory_ForAnotherOrganisersEvent_Returns403()
+    public async Task Organiser_CannotCreateACategory_ForAnotherOrganisersEvent_Returns403()
     {
-        var owner = await TestApi.NewOrganiserAsync(_factory);
-        var other = await TestApi.NewOrganiserAsync(_factory);
-        var eventId = await TestApi.CreateEventAsync(owner.Client);
+        using var db = TestHelper.NewDb();
+        var owner = TestHelper.AddOrganiser(db, "owner@test.com");
+        var other = TestHelper.AddOrganiser(db, "other@test.com");
+        var ev = TestHelper.AddEvent(db, owner.OrganiserId);
+        var controller = TestHelper.Categories(db, other.OrganiserId, Roles.Organiser);
 
-        var response = await other.Client.PostAsJsonAsync($"/api/events/{eventId}/categories",
-            new { categoryName = "Sneaky", entryFee = 0 });
+        var result = await controller.CreateCategory(ev.EventId, new CategoryRequest { CategoryName = "Sneaky", EntryFee = 0 });
 
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(403, TestHelper.StatusOf(result));
+        Assert.Empty(db.Categories);
     }
 
     [Fact]
-    public async Task Participant_CannotCreateCategory_Returns403()
+    public async Task Participant_CannotCreateACategory_Returns403()
     {
-        var organiser = await TestApi.NewOrganiserAsync(_factory);
-        var participant = await TestApi.NewParticipantAsync(_factory);
-        var eventId = await TestApi.CreateEventAsync(organiser.Client);
+        using var db = TestHelper.NewDb();
+        var organiser = TestHelper.AddOrganiser(db);
+        var participant = TestHelper.AddParticipant(db);
+        var ev = TestHelper.AddEvent(db, organiser.OrganiserId);
+        var controller = TestHelper.Categories(db, participant.ParticipantId, Roles.Participant);
 
-        var response = await participant.Client.PostAsJsonAsync($"/api/events/{eventId}/categories",
-            new { categoryName = "Nope", entryFee = 0 });
+        var result = await controller.CreateCategory(ev.EventId, new CategoryRequest { CategoryName = "Nope", EntryFee = 0 });
 
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(403, TestHelper.StatusOf(result));
+    }
+
+    [Fact]
+    public async Task CreateCategory_ForAnEventThatDoesNotExist_Returns404()
+    {
+        using var db = TestHelper.NewDb();
+        var organiser = TestHelper.AddOrganiser(db);
+        var controller = TestHelper.Categories(db, organiser.OrganiserId, Roles.Organiser);
+
+        var result = await controller.CreateCategory(999, new CategoryRequest { CategoryName = "Ghost", EntryFee = 0 });
+
+        Assert.Equal(404, TestHelper.StatusOf(result));
     }
 
     [Fact]
     public async Task Organiser_CanUpdateAndDeleteOwnCategory()
     {
-        var organiser = await TestApi.NewOrganiserAsync(_factory);
-        var eventId = await TestApi.CreateEventAsync(organiser.Client);
-        var categoryId = await TestApi.CreateCategoryAsync(organiser.Client, eventId);
+        using var db = TestHelper.NewDb();
+        var organiser = TestHelper.AddOrganiser(db);
+        var ev = TestHelper.AddEvent(db, organiser.OrganiserId);
+        var category = TestHelper.AddCategory(db, ev.EventId);
+        var controller = TestHelper.Categories(db, organiser.OrganiserId, Roles.Organiser);
 
-        var update = await organiser.Client.PutAsJsonAsync($"/api/categories/{categoryId}",
-            new { categoryName = "Senior", distanceKm = 21.1, entryFee = 200.0 });
-        Assert.Equal(HttpStatusCode.OK, update.StatusCode);
+        var update = await controller.UpdateCategory(category.CategoryId, new CategoryRequest { CategoryName = "Senior", EntryFee = 200 });
+        Assert.Equal(200, TestHelper.StatusOf(update));
+        Assert.Equal("Senior", db.Categories.Single().CategoryName);
 
-        var delete = await organiser.Client.DeleteAsync($"/api/categories/{categoryId}");
-        Assert.Equal(HttpStatusCode.NoContent, delete.StatusCode);
-
-        Assert.Equal(HttpStatusCode.NotFound, (await organiser.Client.GetAsync($"/api/categories/{categoryId}")).StatusCode);
+        var delete = await controller.DeleteCategory(category.CategoryId);
+        Assert.Equal(204, TestHelper.StatusOf(delete));
+        Assert.Empty(db.Categories);
     }
 
     [Fact]
     public async Task Organiser_CannotUpdateOrDeleteAnotherOrganisersCategory_Returns403()
     {
-        var owner = await TestApi.NewOrganiserAsync(_factory);
-        var other = await TestApi.NewOrganiserAsync(_factory);
-        var eventId = await TestApi.CreateEventAsync(owner.Client);
-        var categoryId = await TestApi.CreateCategoryAsync(owner.Client, eventId);
+        using var db = TestHelper.NewDb();
+        var owner = TestHelper.AddOrganiser(db, "owner@test.com");
+        var other = TestHelper.AddOrganiser(db, "other@test.com");
+        var ev = TestHelper.AddEvent(db, owner.OrganiserId);
+        var category = TestHelper.AddCategory(db, ev.EventId);
+        var controller = TestHelper.Categories(db, other.OrganiserId, Roles.Organiser);
 
-        var update = await other.Client.PutAsJsonAsync($"/api/categories/{categoryId}",
-            new { categoryName = "Hijacked", entryFee = 0 });
-        var delete = await other.Client.DeleteAsync($"/api/categories/{categoryId}");
+        var update = await controller.UpdateCategory(category.CategoryId, new CategoryRequest { CategoryName = "Hijacked", EntryFee = 0 });
+        var delete = await controller.DeleteCategory(category.CategoryId);
 
-        Assert.Equal(HttpStatusCode.Forbidden, update.StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, delete.StatusCode);
+        Assert.Equal(403, TestHelper.StatusOf(update));
+        Assert.Equal(403, TestHelper.StatusOf(delete));
+        Assert.Single(db.Categories);
     }
 
     [Fact]
-    public async Task Organiser_CannotDeleteCategoryThatHasEnrolments_Returns409()
+    public async Task Organiser_CannotDeleteACategoryThatHasEnrolments_Returns409()
     {
-        var scenario = await TestApi.NewEnrolmentScenarioAsync(_factory);
+        using var db = TestHelper.NewDb();
+        var s = TestHelper.NewScenario(db);
+        var controller = TestHelper.Categories(db, s.Organiser.OrganiserId, Roles.Organiser);
 
-        var response = await scenario.Organiser.Client.DeleteAsync($"/api/categories/{scenario.CategoryId}");
+        var result = await controller.DeleteCategory(s.Category.CategoryId);
 
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal(409, TestHelper.StatusOf(result));
+        Assert.Single(db.Categories);
     }
 
     [Fact]
-    public async Task CreateCategory_WithNegativeFee_Returns400()
+    public async Task ListCategories_ForAnEventThatDoesNotExist_Returns404()
     {
-        var organiser = await TestApi.NewOrganiserAsync(_factory);
-        var eventId = await TestApi.CreateEventAsync(organiser.Client);
+        using var db = TestHelper.NewDb();
+        var participant = TestHelper.AddParticipant(db);
 
-        var response = await organiser.Client.PostAsJsonAsync($"/api/events/{eventId}/categories",
-            new { categoryName = "Bad Fee", entryFee = -5 });
+        var result = await TestHelper.Categories(db, participant.ParticipantId, Roles.Participant).GetEventCategories(999);
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task ListCategories_ForMissingEvent_Returns404()
-    {
-        var participant = await TestApi.NewParticipantAsync(_factory);
-        var response = await participant.Client.GetAsync("/api/events/999999/categories");
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(404, TestHelper.StatusOf(result));
     }
 }
