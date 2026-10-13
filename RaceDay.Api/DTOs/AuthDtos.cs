@@ -30,16 +30,26 @@ public class LoginRequest
 }
 
 /// <summary>Returned when a Participant account is created.</summary>
-public record ParticipantCreatedResponse(int ParticipantId, string FullName, string Email);
+public class ParticipantCreatedResponse
+{
+    public int ParticipantId { get; set; }
+    public string FullName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+}
 
 /// <summary>Returned when an Organiser account is created.</summary>
-public record OrganiserCreatedResponse(int OrganiserId, string FullName, string Email);
+public class OrganiserCreatedResponse
+{
+    public int OrganiserId { get; set; }
+    public string FullName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+}
 
-/// <summary>Returned after a successful login. The session cookie is set on the response.</summary>
-public record LoginResponse(int UserId, string FullName, string Email, string Role);
-
-/// <summary>Returned by the refresh-token (session renewal) endpoint.</summary>
-public record SessionRenewedResponse(int IdleTimeoutMinutes, string Message);
-
-/// <summary>A simple confirmation message.</summary>
-public record MessageResponse(string Message);
+/// <summary>Returned after a successful login.</summary>
+public class LoginResponse
+{
+    public int UserId { get; set; }
+    public string FullName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string Role { get; set; } = string.Empty;
+}

@@ -12,6 +12,15 @@ public class CreateEnrolmentRequest
     public int CategoryId { get; set; }
 }
 
-public record EnrolmentResponse(
-    int EnrolmentId, int ParticipantId, string ParticipantName, int EventId, string EventName,
-    int CategoryId, string CategoryName, DateTime EnrolmentDate, string Status);
+public class EnrolmentResponse
+{
+    public int EnrolmentId { get; set; }
+    public int ParticipantId { get; set; }
+    public string ParticipantName { get; set; } = string.Empty;
+    public int EventId { get; set; }
+    public string EventName { get; set; } = string.Empty;
+    public int CategoryId { get; set; }
+    public string CategoryName { get; set; } = string.Empty;
+    public DateTime EnrolmentDate { get; set; }
+    public string Status { get; set; } = string.Empty;
+}

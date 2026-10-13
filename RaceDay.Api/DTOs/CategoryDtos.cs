@@ -17,4 +17,11 @@ public class CategoryRequest
     public decimal EntryFee { get; set; }
 }
 
-public record CategoryResponse(int CategoryId, int EventId, string CategoryName, decimal? DistanceKm, decimal EntryFee);
+public class CategoryResponse
+{
+    public int CategoryId { get; set; }
+    public int EventId { get; set; }
+    public string CategoryName { get; set; } = string.Empty;
+    public decimal? DistanceKm { get; set; }
+    public decimal EntryFee { get; set; }
+}

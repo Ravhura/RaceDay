@@ -28,6 +28,15 @@ public class EventRequest
     public EventType? EventType { get; set; }
 }
 
-public record EventResponse(
-    int EventId, int OrganiserId, string EventName, string Description, DateOnly EventDate,
-    string? Location, decimal DistanceKm, EventType EventType, string Status);
+public class EventResponse
+{
+    public int EventId { get; set; }
+    public int OrganiserId { get; set; }
+    public string EventName { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public DateOnly EventDate { get; set; }
+    public string? Location { get; set; }
+    public decimal DistanceKm { get; set; }
+    public EventType EventType { get; set; }
+    public string Status { get; set; } = string.Empty;
+}
