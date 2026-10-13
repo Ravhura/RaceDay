@@ -14,4 +14,12 @@ public class UpdateProfileRequest
 }
 
 /// <summary>A user's own profile. The password hash is never included.</summary>
-public record ProfileResponse(int Id, string Role, string FullName, string Email, string? PhoneNumber, DateTime CreatedAt);
+public class ProfileResponse
+{
+    public int Id { get; set; }
+    public string Role { get; set; } = string.Empty;
+    public string FullName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string? PhoneNumber { get; set; }
+    public DateTime CreatedAt { get; set; }
+}

@@ -21,6 +21,15 @@ public class CaptureResultRequest : UpdateResultRequest
     public int EnrolmentId { get; set; }
 }
 
-public record ResultResponse(
-    int ResultId, int EnrolmentId, int ParticipantId, string ParticipantName, int EventId, string EventName,
-    string CategoryName, TimeSpan? FinishTime, int? Position);
+public class ResultResponse
+{
+    public int ResultId { get; set; }
+    public int EnrolmentId { get; set; }
+    public int ParticipantId { get; set; }
+    public string ParticipantName { get; set; } = string.Empty;
+    public int EventId { get; set; }
+    public string EventName { get; set; } = string.Empty;
+    public string CategoryName { get; set; } = string.Empty;
+    public TimeSpan? FinishTime { get; set; }
+    public int? Position { get; set; }
+}
