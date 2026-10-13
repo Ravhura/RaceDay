@@ -2,40 +2,41 @@
 using RaceDay.Api.Authentication;
 using RaceDay.Api.Data;
 using RaceDay.Api.DTOs;
-using RaceDay.Api.Middleware;
 using RaceDay.Api.Models;
 
 namespace RaceDay.Api.Services;
 
-/// <summary>Capturing results (Organiser of the event) and viewing them (owner Participant / managing Organiser).</summary>
+/// <summary>Capturing results (the Organiser of the event) and viewing them (owner Participant or managing Organiser).</summary>
 public class ResultService
 {
     private readonly RaceDayDbContext _db;
-    private readonly ICurrentUser _user;
 
-    public ResultService(RaceDayDbContext db, ICurrentUser user)
+    public ResultService(RaceDayDbContext db)
     {
         _db = db;
-        _user = user;
     }
 
-    public async Task<ResultResponse> CaptureAsync(CaptureResultRequest request)
+    public async Task<ServiceResult<ResultResponse>> CaptureAsync(int organiserId, CaptureResultRequest request)
     {
         var enrolment = await _db.Enrolments
             .Include(e => e.Category).ThenInclude(c => c.Event)
-            .FirstOrDefaultAsync(e => e.EnrolmentId == request.EnrolmentId)
-            ?? throw new NotFoundException("Enrolment not found.");
-
-        if (enrolment.Category.Event.OrganiserId != _user.UserId)
+            .FirstOrDefaultAsync(e => e.EnrolmentId == request.EnrolmentId);
+        if (enrolment == null)
         {
-            throw new ForbiddenException("You can only capture results for events you manage.");
+            return ServiceResult<ResultResponse>.NotFound("Enrolment not found.");
+        }
+        if (enrolment.Category.Event.OrganiserId != organiserId)
+        {
+            return ServiceResult<ResultResponse>.Forbidden("You can only capture results for events you manage.");
         }
         if (await _db.Results.AnyAsync(r => r.EnrolmentId == request.EnrolmentId))
         {
-            throw new ConflictException("A result has already been captured for this enrolment.");
+            return ServiceResult<ResultResponse>.Conflict("A result has already been captured for this enrolment.");
         }
-
-        EnsureValidFinishTime(request.FinishTime!.Value);
+        if (!IsValidFinishTime(request.FinishTime!.Value))
+        {
+            return ServiceResult<ResultResponse>.BadRequest("Finish time must be greater than 00:00:00 and less than 24 hours.");
+        }
 
         var result = new Result
         {
@@ -46,87 +47,131 @@ public class ResultService
         _db.Results.Add(result);
         await _db.SaveChangesAsync();
 
-        return (await Query().AsNoTracking().FirstAsync(r => r.ResultId == result.ResultId)).ToResponse();
+        var saved = await Query().FirstAsync(r => r.ResultId == result.ResultId);
+        return ServiceResult<ResultResponse>.Created(ToResponse(saved));
     }
 
-    public async Task<ResultResponse> UpdateAsync(int id, UpdateResultRequest request)
+    public async Task<ServiceResult<ResultResponse>> UpdateAsync(int organiserId, int id, UpdateResultRequest request)
     {
-        var result = await FindManagedAsync(id);
-        EnsureValidFinishTime(request.FinishTime!.Value);
+        var result = await Query().FirstOrDefaultAsync(r => r.ResultId == id);
+        if (result == null)
+        {
+            return ServiceResult<ResultResponse>.NotFound("Result not found.");
+        }
+        if (result.Enrolment.Category.Event.OrganiserId != organiserId)
+        {
+            return ServiceResult<ResultResponse>.Forbidden("You can only manage results for events you manage.");
+        }
+        if (!IsValidFinishTime(request.FinishTime!.Value))
+        {
+            return ServiceResult<ResultResponse>.BadRequest("Finish time must be greater than 00:00:00 and less than 24 hours.");
+        }
+
         result.FinishTime = request.FinishTime;
         result.Position = request.Position;
         await _db.SaveChangesAsync();
-        return result.ToResponse();
+
+        return ServiceResult<ResultResponse>.Ok(ToResponse(result));
     }
 
-    public async Task DeleteAsync(int id)
+    public async Task<ServiceResult<bool>> DeleteAsync(int organiserId, int id)
     {
-        var result = await FindManagedAsync(id);
+        var result = await Query().FirstOrDefaultAsync(r => r.ResultId == id);
+        if (result == null)
+        {
+            return ServiceResult<bool>.NotFound("Result not found.");
+        }
+        if (result.Enrolment.Category.Event.OrganiserId != organiserId)
+        {
+            return ServiceResult<bool>.Forbidden("You can only manage results for events you manage.");
+        }
+
         _db.Results.Remove(result);
         await _db.SaveChangesAsync();
+
+        return ServiceResult<bool>.NoContent();
     }
 
-    public async Task<ResultResponse> GetAsync(int id)
+    public async Task<ServiceResult<ResultResponse>> GetAsync(int userId, string role, int id)
     {
-        var result = await Query().AsNoTracking().FirstOrDefaultAsync(r => r.ResultId == id)
-                     ?? throw new NotFoundException("Result not found.");
+        var result = await Query().FirstOrDefaultAsync(r => r.ResultId == id);
+        if (result == null)
+        {
+            return ServiceResult<ResultResponse>.NotFound("Result not found.");
+        }
 
-        var allowed = _user.Role == Roles.Participant
-            ? result.Enrolment.ParticipantId == _user.UserId
-            : result.Enrolment.Category.Event.OrganiserId == _user.UserId;
+        // A Participant may only see their own result. An Organiser may only see results for their own events.
+        bool allowed;
+        if (role == Roles.Participant)
+        {
+            allowed = result.Enrolment.ParticipantId == userId;
+        }
+        else
+        {
+            allowed = result.Enrolment.Category.Event.OrganiserId == userId;
+        }
+
         if (!allowed)
         {
-            throw new ForbiddenException("You do not have access to this result.");
+            return ServiceResult<ResultResponse>.Forbidden("You do not have access to this result.");
         }
-        return result.ToResponse();
+        return ServiceResult<ResultResponse>.Ok(ToResponse(result));
     }
 
-    public async Task<List<ResultResponse>> ListForParticipantAsync(int participantId)
+    public async Task<ServiceResult<List<ResultResponse>>> ListForParticipantAsync(int participantId)
     {
-        _user.EnsureIsSelf(participantId);
-        var list = await Query().AsNoTracking()
+        var list = await Query()
             .Where(r => r.Enrolment.ParticipantId == participantId)
             .ToListAsync();
-        return list.Select(r => r.ToResponse()).ToList();
+        return ServiceResult<List<ResultResponse>>.Ok(list.Select(ToResponse).ToList());
     }
 
-    public async Task<List<ResultResponse>> ListForEventAsync(int eventId)
+    public async Task<ServiceResult<List<ResultResponse>>> ListForEventAsync(int organiserId, int eventId)
     {
-        var ev = await _db.Events.AsNoTracking().FirstOrDefaultAsync(e => e.EventId == eventId)
-                 ?? throw new NotFoundException("Event not found.");
-        if (ev.OrganiserId != _user.UserId)
+        var ev = await _db.Events.FirstOrDefaultAsync(e => e.EventId == eventId);
+        if (ev == null)
         {
-            throw new ForbiddenException("You can only view results for events you manage.");
+            return ServiceResult<List<ResultResponse>>.NotFound("Event not found.");
+        }
+        if (ev.OrganiserId != organiserId)
+        {
+            return ServiceResult<List<ResultResponse>>.Forbidden("You can only view results for events you manage.");
         }
 
-        var list = await Query().AsNoTracking()
+        var list = await Query()
             .Where(r => r.Enrolment.EventId == eventId)
             .OrderBy(r => r.Position)
             .ToListAsync();
-        return list.Select(r => r.ToResponse()).ToList();
+        return ServiceResult<List<ResultResponse>>.Ok(list.Select(ToResponse).ToList());
     }
 
-    private async Task<Result> FindManagedAsync(int id)
+    // The SQL TIME column only holds 00:00:00 to 23:59:59, so reject anything outside that.
+    private static bool IsValidFinishTime(TimeSpan time)
     {
-        var result = await Query().FirstOrDefaultAsync(r => r.ResultId == id)
-                     ?? throw new NotFoundException("Result not found.");
-        if (result.Enrolment.Category.Event.OrganiserId != _user.UserId)
-        {
-            throw new ForbiddenException("You can only manage results for events you manage.");
-        }
-        return result;
+        return time > TimeSpan.Zero && time < TimeSpan.FromHours(24);
     }
 
-    // Implementation safeguard: the SQL TIME column only holds 00:00:00 - 23:59:59.
-    private static void EnsureValidFinishTime(TimeSpan time)
+    // Loads results together with the enrolment, participant, category and event.
+    private IQueryable<Result> Query()
     {
-        if (time <= TimeSpan.Zero || time >= TimeSpan.FromHours(24))
-        {
-            throw new BadRequestException("Finish time must be greater than 00:00:00 and less than 24 hours.");
-        }
+        return _db.Results
+            .Include(r => r.Enrolment).ThenInclude(e => e.Participant)
+            .Include(r => r.Enrolment).ThenInclude(e => e.Category).ThenInclude(c => c.Event);
     }
 
-    private IQueryable<Result> Query() => _db.Results
-        .Include(r => r.Enrolment).ThenInclude(e => e.Participant)
-        .Include(r => r.Enrolment).ThenInclude(e => e.Category).ThenInclude(c => c.Event);
+    private static ResultResponse ToResponse(Result r)
+    {
+        return new ResultResponse
+        {
+            ResultId = r.ResultId,
+            EnrolmentId = r.EnrolmentId,
+            ParticipantId = r.Enrolment.ParticipantId,
+            ParticipantName = r.Enrolment.Participant.FullName,
+            EventId = r.Enrolment.EventId,
+            EventName = r.Enrolment.Category.Event.EventName,
+            CategoryName = r.Enrolment.Category.CategoryName,
+            FinishTime = r.FinishTime,
+            Position = r.Position
+        };
+    }
 }
