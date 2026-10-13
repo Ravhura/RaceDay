@@ -1,52 +1,54 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using RaceDay.Api.Authentication;
 using RaceDay.Api.Data;
 using RaceDay.Api.DTOs;
-using RaceDay.Api.Middleware;
 using RaceDay.Api.Models;
 
 namespace RaceDay.Api.Services;
 
-/// <summary>Category viewing (both roles) and management (Organiser who owns the event).</summary>
+/// <summary>Category viewing (anyone logged in) and management (the Organiser who owns the event).</summary>
 public class CategoryService
 {
     private readonly RaceDayDbContext _db;
-    private readonly ICurrentUser _user;
 
-    public CategoryService(RaceDayDbContext db, ICurrentUser user)
+    public CategoryService(RaceDayDbContext db)
     {
         _db = db;
-        _user = user;
     }
 
-    public async Task<List<CategoryResponse>> ListForEventAsync(int eventId)
+    public async Task<ServiceResult<List<CategoryResponse>>> ListForEventAsync(int eventId)
     {
         if (!await _db.Events.AnyAsync(e => e.EventId == eventId))
         {
-            throw new NotFoundException("Event not found.");
+            return ServiceResult<List<CategoryResponse>>.NotFound("Event not found.");
         }
 
-        var categories = await _db.Categories.AsNoTracking()
+        var categories = await _db.Categories
             .Where(c => c.EventId == eventId)
             .OrderBy(c => c.CategoryName)
             .ToListAsync();
-        return categories.Select(c => c.ToResponse()).ToList();
+        return ServiceResult<List<CategoryResponse>>.Ok(categories.Select(ToResponse).ToList());
     }
 
-    public async Task<CategoryResponse> GetAsync(int id)
+    public async Task<ServiceResult<CategoryResponse>> GetAsync(int id)
     {
-        var category = await _db.Categories.AsNoTracking().FirstOrDefaultAsync(c => c.CategoryId == id)
-                       ?? throw new NotFoundException("Category not found.");
-        return category.ToResponse();
-    }
-
-    public async Task<CategoryResponse> CreateAsync(int eventId, CategoryRequest request)
-    {
-        var ev = await _db.Events.FirstOrDefaultAsync(e => e.EventId == eventId)
-                 ?? throw new NotFoundException("Event not found.");
-        if (ev.OrganiserId != _user.UserId)
+        var category = await _db.Categories.FirstOrDefaultAsync(c => c.CategoryId == id);
+        if (category == null)
         {
-            throw new ForbiddenException("You can only add categories to events you manage.");
+            return ServiceResult<CategoryResponse>.NotFound("Category not found.");
+        }
+        return ServiceResult<CategoryResponse>.Ok(ToResponse(category));
+    }
+
+    public async Task<ServiceResult<CategoryResponse>> CreateAsync(int organiserId, int eventId, CategoryRequest request)
+    {
+        var ev = await _db.Events.FirstOrDefaultAsync(e => e.EventId == eventId);
+        if (ev == null)
+        {
+            return ServiceResult<CategoryResponse>.NotFound("Event not found.");
+        }
+        if (ev.OrganiserId != organiserId)
+        {
+            return ServiceResult<CategoryResponse>.Forbidden("You can only add categories to events you manage.");
         }
 
         var category = new Category
@@ -58,38 +60,61 @@ public class CategoryService
         };
         _db.Categories.Add(category);
         await _db.SaveChangesAsync();
-        return category.ToResponse();
+
+        return ServiceResult<CategoryResponse>.Created(ToResponse(category));
     }
 
-    public async Task<CategoryResponse> UpdateAsync(int id, CategoryRequest request)
+    public async Task<ServiceResult<CategoryResponse>> UpdateAsync(int organiserId, int id, CategoryRequest request)
     {
-        var category = await FindOwnedAsync(id);
+        var category = await _db.Categories.Include(c => c.Event).FirstOrDefaultAsync(c => c.CategoryId == id);
+        if (category == null)
+        {
+            return ServiceResult<CategoryResponse>.NotFound("Category not found.");
+        }
+        if (category.Event.OrganiserId != organiserId)
+        {
+            return ServiceResult<CategoryResponse>.Forbidden("You can only manage categories for events you manage.");
+        }
+
         category.CategoryName = request.CategoryName.Trim();
         category.DistanceKm = request.DistanceKm;
         category.EntryFee = request.EntryFee;
         await _db.SaveChangesAsync();
-        return category.ToResponse();
+
+        return ServiceResult<CategoryResponse>.Ok(ToResponse(category));
     }
 
-    public async Task DeleteAsync(int id)
+    public async Task<ServiceResult<bool>> DeleteAsync(int organiserId, int id)
     {
-        var category = await FindOwnedAsync(id);
+        var category = await _db.Categories.Include(c => c.Event).FirstOrDefaultAsync(c => c.CategoryId == id);
+        if (category == null)
+        {
+            return ServiceResult<bool>.NotFound("Category not found.");
+        }
+        if (category.Event.OrganiserId != organiserId)
+        {
+            return ServiceResult<bool>.Forbidden("You can only manage categories for events you manage.");
+        }
         if (await _db.Enrolments.AnyAsync(e => e.CategoryId == id))
         {
-            throw new ConflictException("This category has enrolments and cannot be deleted.");
+            return ServiceResult<bool>.Conflict("This category has enrolments and cannot be deleted.");
         }
+
         _db.Categories.Remove(category);
         await _db.SaveChangesAsync();
+
+        return ServiceResult<bool>.NoContent();
     }
 
-    private async Task<Category> FindOwnedAsync(int id)
+    private static CategoryResponse ToResponse(Category c)
     {
-        var category = await _db.Categories.Include(c => c.Event).FirstOrDefaultAsync(c => c.CategoryId == id)
-                       ?? throw new NotFoundException("Category not found.");
-        if (category.Event.OrganiserId != _user.UserId)
+        return new CategoryResponse
         {
-            throw new ForbiddenException("You can only manage categories for events you manage.");
-        }
-        return category;
+            CategoryId = c.CategoryId,
+            EventId = c.EventId,
+            CategoryName = c.CategoryName,
+            DistanceKm = c.DistanceKm,
+            EntryFee = c.EntryFee
+        };
     }
 }

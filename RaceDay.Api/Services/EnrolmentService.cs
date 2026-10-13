@@ -2,48 +2,50 @@
 using RaceDay.Api.Authentication;
 using RaceDay.Api.Data;
 using RaceDay.Api.DTOs;
-using RaceDay.Api.Middleware;
 using RaceDay.Api.Models;
 
 namespace RaceDay.Api.Services;
 
-/// <summary>Entering events (Participant) and viewing enrolments (owner Participant / managing Organiser).</summary>
+/// <summary>Entering events (Participant) and viewing enrolments (the owner Participant or the managing Organiser).</summary>
 public class EnrolmentService
 {
     private readonly RaceDayDbContext _db;
-    private readonly ICurrentUser _user;
 
-    public EnrolmentService(RaceDayDbContext db, ICurrentUser user)
+    public EnrolmentService(RaceDayDbContext db)
     {
         _db = db;
-        _user = user;
     }
 
-    public async Task<EnrolmentResponse> CreateAsync(CreateEnrolmentRequest request)
+    public async Task<ServiceResult<EnrolmentResponse>> CreateAsync(int participantId, CreateEnrolmentRequest request)
     {
-        var participantId = _user.UserId; // from the session, never from the request body
-
-        var ev = await _db.Events.AsNoTracking().FirstOrDefaultAsync(e => e.EventId == request.EventId)
-                 ?? throw new NotFoundException("Event not found.");
-        var category = await _db.Categories.AsNoTracking().FirstOrDefaultAsync(c => c.CategoryId == request.CategoryId)
-                       ?? throw new NotFoundException("Category not found.");
-
-        // The same rule the database enforces with the composite (EventId, CategoryId) foreign key.
-        if (category.EventId != ev.EventId)
+        var ev = await _db.Events.FirstOrDefaultAsync(e => e.EventId == request.EventId);
+        if (ev == null)
         {
-            throw new BadRequestException("The selected category does not belong to this event.");
+            return ServiceResult<EnrolmentResponse>.NotFound("Event not found.");
         }
 
-        var duplicate = await _db.Enrolments.AnyAsync(e =>
-            e.ParticipantId == participantId && e.EventId == ev.EventId && e.CategoryId == category.CategoryId);
-        if (duplicate)
+        var category = await _db.Categories.FirstOrDefaultAsync(c => c.CategoryId == request.CategoryId);
+        if (category == null)
         {
-            throw new ConflictException("You are already enrolled in this event and category.");
+            return ServiceResult<EnrolmentResponse>.NotFound("Category not found.");
+        }
+
+        // The selected category must belong to the selected event (the database enforces this too).
+        if (category.EventId != ev.EventId)
+        {
+            return ServiceResult<EnrolmentResponse>.BadRequest("The selected category does not belong to this event.");
+        }
+
+        bool alreadyEnrolled = await _db.Enrolments.AnyAsync(e =>
+            e.ParticipantId == participantId && e.EventId == ev.EventId && e.CategoryId == category.CategoryId);
+        if (alreadyEnrolled)
+        {
+            return ServiceResult<EnrolmentResponse>.Conflict("You are already enrolled in this event and category.");
         }
 
         var enrolment = new Enrolment
         {
-            ParticipantId = participantId,
+            ParticipantId = participantId, // the logged-in Participant, taken from the session
             EventId = ev.EventId,
             CategoryId = category.CategoryId,
             Status = EnrolmentStatuses.Confirmed
@@ -51,71 +53,115 @@ public class EnrolmentService
         _db.Enrolments.Add(enrolment);
         await _db.SaveChangesAsync();
 
-        return (await Query().FirstAsync(e => e.EnrolmentId == enrolment.EnrolmentId)).ToResponse();
+        // Load the participant name, event name and category name for the response.
+        var saved = await Query().FirstAsync(e => e.EnrolmentId == enrolment.EnrolmentId);
+        return ServiceResult<EnrolmentResponse>.Created(ToResponse(saved));
     }
 
-    public async Task<List<EnrolmentResponse>> ListForParticipantAsync(int participantId)
+    public async Task<ServiceResult<List<EnrolmentResponse>>> ListForParticipantAsync(int participantId)
     {
-        _user.EnsureIsSelf(participantId);
-        var list = await Query().Where(e => e.ParticipantId == participantId)
-            .OrderByDescending(e => e.EnrolmentDate).ToListAsync();
-        return list.Select(e => e.ToResponse()).ToList();
+        var list = await Query()
+            .Where(e => e.ParticipantId == participantId)
+            .OrderByDescending(e => e.EnrolmentDate)
+            .ToListAsync();
+        return ServiceResult<List<EnrolmentResponse>>.Ok(list.Select(ToResponse).ToList());
     }
 
-    public async Task<EnrolmentResponse> GetAsync(int id)
+    public async Task<ServiceResult<EnrolmentResponse>> GetAsync(int userId, string role, int id)
     {
-        var enrolment = await Query().FirstOrDefaultAsync(e => e.EnrolmentId == id)
-                        ?? throw new NotFoundException("Enrolment not found.");
+        var enrolment = await Query().FirstOrDefaultAsync(e => e.EnrolmentId == id);
+        if (enrolment == null)
+        {
+            return ServiceResult<EnrolmentResponse>.NotFound("Enrolment not found.");
+        }
 
-        // Participants see only their own; Organisers see only enrolments for events they manage.
-        var allowed = _user.Role == Roles.Participant
-            ? enrolment.ParticipantId == _user.UserId
-            : enrolment.Category.Event.OrganiserId == _user.UserId;
+        // A Participant may only see their own enrolment. An Organiser may only see enrolments for their own events.
+        bool allowed;
+        if (role == Roles.Participant)
+        {
+            allowed = enrolment.ParticipantId == userId;
+        }
+        else
+        {
+            allowed = enrolment.Category.Event.OrganiserId == userId;
+        }
+
         if (!allowed)
         {
-            throw new ForbiddenException("You do not have access to this enrolment.");
+            return ServiceResult<EnrolmentResponse>.Forbidden("You do not have access to this enrolment.");
         }
-        return enrolment.ToResponse();
+        return ServiceResult<EnrolmentResponse>.Ok(ToResponse(enrolment));
     }
 
-    public async Task DeleteAsync(int id)
+    public async Task<ServiceResult<bool>> DeleteAsync(int participantId, int id)
     {
-        var enrolment = await _db.Enrolments.FirstOrDefaultAsync(e => e.EnrolmentId == id)
-                        ?? throw new NotFoundException("Enrolment not found.");
-        if (enrolment.ParticipantId != _user.UserId)
+        var enrolment = await _db.Enrolments.FirstOrDefaultAsync(e => e.EnrolmentId == id);
+        if (enrolment == null)
         {
-            throw new ForbiddenException("You can only cancel your own enrolments.");
+            return ServiceResult<bool>.NotFound("Enrolment not found.");
+        }
+        if (enrolment.ParticipantId != participantId)
+        {
+            return ServiceResult<bool>.Forbidden("You can only cancel your own enrolments.");
         }
         if (await _db.Results.AnyAsync(r => r.EnrolmentId == id))
         {
-            throw new ConflictException("A result has already been captured for this enrolment.");
+            return ServiceResult<bool>.Conflict("A result has already been captured for this enrolment.");
         }
+
         _db.Enrolments.Remove(enrolment);
         await _db.SaveChangesAsync();
+
+        return ServiceResult<bool>.NoContent();
     }
 
-    public async Task<List<EnrolmentResponse>> ListForEventAsync(int eventId)
+    public async Task<ServiceResult<List<EnrolmentResponse>>> ListForEventAsync(int organiserId, int eventId)
     {
-        var ev = await _db.Events.AsNoTracking().FirstOrDefaultAsync(e => e.EventId == eventId)
-                 ?? throw new NotFoundException("Event not found.");
-        if (ev.OrganiserId != _user.UserId)
+        var ev = await _db.Events.FirstOrDefaultAsync(e => e.EventId == eventId);
+        if (ev == null)
         {
-            throw new ForbiddenException("You can only view enrolments for events you manage.");
+            return ServiceResult<List<EnrolmentResponse>>.NotFound("Event not found.");
+        }
+        if (ev.OrganiserId != organiserId)
+        {
+            return ServiceResult<List<EnrolmentResponse>>.Forbidden("You can only view enrolments for events you manage.");
         }
 
         var list = await Query().Where(e => e.EventId == eventId).OrderBy(e => e.EnrolmentDate).ToListAsync();
-        return list.Select(e => e.ToResponse()).ToList();
+        return ServiceResult<List<EnrolmentResponse>>.Ok(list.Select(ToResponse).ToList());
     }
 
-    public async Task<List<EnrolmentResponse>> ListForOrganiserAsync(int organiserId)
+    public async Task<ServiceResult<List<EnrolmentResponse>>> ListForOrganiserAsync(int organiserId)
     {
-        _user.EnsureIsSelf(organiserId);
-        var list = await Query().Where(e => e.Category.Event.OrganiserId == organiserId)
-            .OrderBy(e => e.EventId).ThenBy(e => e.EnrolmentDate).ToListAsync();
-        return list.Select(e => e.ToResponse()).ToList();
+        var list = await Query()
+            .Where(e => e.Category.Event.OrganiserId == organiserId)
+            .OrderBy(e => e.EventId)
+            .ThenBy(e => e.EnrolmentDate)
+            .ToListAsync();
+        return ServiceResult<List<EnrolmentResponse>>.Ok(list.Select(ToResponse).ToList());
     }
 
-    private IQueryable<Enrolment> Query() => _db.Enrolments.AsNoTracking()
-        .Include(e => e.Participant)
-        .Include(e => e.Category).ThenInclude(c => c.Event);
+    // Loads enrolments together with the participant, category and event, so names can be shown.
+    private IQueryable<Enrolment> Query()
+    {
+        return _db.Enrolments
+            .Include(e => e.Participant)
+            .Include(e => e.Category).ThenInclude(c => c.Event);
+    }
+
+    private static EnrolmentResponse ToResponse(Enrolment e)
+    {
+        return new EnrolmentResponse
+        {
+            EnrolmentId = e.EnrolmentId,
+            ParticipantId = e.ParticipantId,
+            ParticipantName = e.Participant.FullName,
+            EventId = e.EventId,
+            EventName = e.Category.Event.EventName,
+            CategoryId = e.CategoryId,
+            CategoryName = e.Category.CategoryName,
+            EnrolmentDate = e.EnrolmentDate,
+            Status = e.Status
+        };
+    }
 }

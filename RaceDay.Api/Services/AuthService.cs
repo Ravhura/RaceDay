@@ -2,83 +2,109 @@
 using RaceDay.Api.Authentication;
 using RaceDay.Api.Data;
 using RaceDay.Api.DTOs;
-using RaceDay.Api.Middleware;
 using RaceDay.Api.Models;
 
 namespace RaceDay.Api.Services;
 
-/// <summary>Registration and credential checking for both roles.</summary>
+/// <summary>Registration and login for both roles.</summary>
 public class AuthService
 {
     private readonly RaceDayDbContext _db;
-    private readonly PasswordService _passwords;
 
-    public AuthService(RaceDayDbContext db, PasswordService passwords)
+    public AuthService(RaceDayDbContext db)
     {
         _db = db;
-        _passwords = passwords;
     }
 
-    public async Task<Participant> RegisterParticipantAsync(RegisterRequest request)
+    public async Task<ServiceResult<ParticipantCreatedResponse>> RegisterParticipantAsync(RegisterRequest request)
     {
-        var email = Normalise(request.Email);
+        var email = request.Email.Trim().ToLowerInvariant();
+
         if (await _db.Participants.AnyAsync(p => p.Email == email))
         {
-            throw new ConflictException("An account with this email already exists.");
+            return ServiceResult<ParticipantCreatedResponse>.Conflict("An account with this email already exists.");
         }
 
         var participant = new Participant
         {
             FullName = request.FullName.Trim(),
             Email = email,
-            PasswordHash = _passwords.Hash(request.Password)
+            // The Identity hasher adds a random salt and hashes the password. The plain password is never stored.
+            PasswordHash = PasswordHelper.Hash(request.Password)
         };
         _db.Participants.Add(participant);
         await _db.SaveChangesAsync();
-        return participant;
+
+        return ServiceResult<ParticipantCreatedResponse>.Created(new ParticipantCreatedResponse
+        {
+            ParticipantId = participant.ParticipantId,
+            FullName = participant.FullName,
+            Email = participant.Email
+        });
     }
 
-    public async Task<Organiser> RegisterOrganiserAsync(RegisterRequest request)
+    public async Task<ServiceResult<OrganiserCreatedResponse>> RegisterOrganiserAsync(RegisterRequest request)
     {
-        var email = Normalise(request.Email);
+        var email = request.Email.Trim().ToLowerInvariant();
+
         if (await _db.Organisers.AnyAsync(o => o.Email == email))
         {
-            throw new ConflictException("An account with this email already exists.");
+            return ServiceResult<OrganiserCreatedResponse>.Conflict("An account with this email already exists.");
         }
 
         var organiser = new Organiser
         {
             FullName = request.FullName.Trim(),
             Email = email,
-            PasswordHash = _passwords.Hash(request.Password)
+            PasswordHash = PasswordHelper.Hash(request.Password)
         };
         _db.Organisers.Add(organiser);
         await _db.SaveChangesAsync();
-        return organiser;
+
+        return ServiceResult<OrganiserCreatedResponse>.Created(new OrganiserCreatedResponse
+        {
+            OrganiserId = organiser.OrganiserId,
+            FullName = organiser.FullName,
+            Email = organiser.Email
+        });
     }
 
-    public async Task<Participant> LoginParticipantAsync(LoginRequest request)
+    public async Task<ServiceResult<LoginResponse>> LoginParticipantAsync(LoginRequest request)
     {
-        var email = Normalise(request.Email);
+        var email = request.Email.Trim().ToLowerInvariant();
         var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Email == email);
-        if (participant is null || !_passwords.Verify(request.Password, participant.PasswordHash))
+
+        // Same message for "unknown email" and "wrong password" so an attacker learns nothing.
+        if (participant == null || !PasswordHelper.Verify(request.Password, participant.PasswordHash))
         {
-            // Same message for "unknown email" and "wrong password" so attackers learn nothing.
-            throw new UnauthorizedException("Invalid email or password.");
+            return ServiceResult<LoginResponse>.Unauthorized("Invalid email or password.");
         }
-        return participant;
+
+        return ServiceResult<LoginResponse>.Ok(new LoginResponse
+        {
+            UserId = participant.ParticipantId,
+            FullName = participant.FullName,
+            Email = participant.Email,
+            Role = Roles.Participant
+        });
     }
 
-    public async Task<Organiser> LoginOrganiserAsync(LoginRequest request)
+    public async Task<ServiceResult<LoginResponse>> LoginOrganiserAsync(LoginRequest request)
     {
-        var email = Normalise(request.Email);
+        var email = request.Email.Trim().ToLowerInvariant();
         var organiser = await _db.Organisers.FirstOrDefaultAsync(o => o.Email == email);
-        if (organiser is null || !_passwords.Verify(request.Password, organiser.PasswordHash))
-        {
-            throw new UnauthorizedException("Invalid email or password.");
-        }
-        return organiser;
-    }
 
-    private static string Normalise(string email) => email.Trim().ToLowerInvariant();
+        if (organiser == null || !PasswordHelper.Verify(request.Password, organiser.PasswordHash))
+        {
+            return ServiceResult<LoginResponse>.Unauthorized("Invalid email or password.");
+        }
+
+        return ServiceResult<LoginResponse>.Ok(new LoginResponse
+        {
+            UserId = organiser.OrganiserId,
+            FullName = organiser.FullName,
+            Email = organiser.Email,
+            Role = Roles.Organiser
+        });
+    }
 }
