@@ -1,5 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using RaceDay.Api.Authentication;
 using RaceDay.Api.DTOs;
 using RaceDay.Api.Services;
@@ -10,83 +9,124 @@ namespace RaceDay.Api.Controllers;
 [ApiController]
 [Route("api")]
 [Produces("application/json")]
-[Authorize]
-[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
-[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
-public class ResultsController : ControllerBase
+public class ResultsController : BaseApiController
 {
     private readonly ResultService _results;
 
-    public ResultsController(ResultService results) => _results = results;
+    public ResultsController(ResultService results)
+    {
+        _results = results;
+    }
 
     /// <summary>Captures a result (finish time and position) for a Participant's enrolment.</summary>
     /// <response code="201">Result captured; returns the new result including its ResultId.</response>
     /// <response code="400">Invalid finish time or position.</response>
+    /// <response code="401">Not logged in.</response>
+    /// <response code="403">Only the Organiser of the event can capture results.</response>
     /// <response code="404">Enrolment not found.</response>
     /// <response code="409">A result already exists for this enrolment.</response>
     [HttpPost("results")]
-    [Authorize(Roles = Roles.Organiser)]
     [ProducesResponseType(typeof(ResultResponse), StatusCodes.Status201Created)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
-    public async Task<ActionResult<ResultResponse>> CaptureResult(CaptureResultRequest request)
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult> CaptureResult(CaptureResultRequest request)
     {
-        var created = await _results.CaptureAsync(request);
-        return Created($"/api/results/{created.ResultId}", created);
+        var check = RequireRole(Roles.Organiser);
+        if (check != null) return check;
+
+        return Respond(await _results.CaptureAsync(UserId, request));
     }
 
     /// <summary>Updates a previously captured result.</summary>
     /// <response code="200">Updated result.</response>
     /// <response code="400">Invalid finish time or position.</response>
+    /// <response code="401">Not logged in.</response>
+    /// <response code="403">You do not manage this event.</response>
     /// <response code="404">Result not found.</response>
     [HttpPut("results/{id:int}")]
-    [Authorize(Roles = Roles.Organiser)]
     [ProducesResponseType(typeof(ResultResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ResultResponse>> UpdateResult(int id, UpdateResultRequest request) =>
-        Ok(await _results.UpdateAsync(id, request));
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult> UpdateResult(int id, UpdateResultRequest request)
+    {
+        var check = RequireRole(Roles.Organiser);
+        if (check != null) return check;
+
+        return Respond(await _results.UpdateAsync(UserId, id, request));
+    }
 
     /// <summary>Deletes a captured result.</summary>
     /// <response code="204">Result deleted.</response>
+    /// <response code="401">Not logged in.</response>
+    /// <response code="403">You do not manage this event.</response>
     /// <response code="404">Result not found.</response>
     [HttpDelete("results/{id:int}")]
-    [Authorize(Roles = Roles.Organiser)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeleteResult(int id)
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult> DeleteResult(int id)
     {
-        await _results.DeleteAsync(id);
-        return NoContent();
+        var check = RequireRole(Roles.Organiser);
+        if (check != null) return check;
+
+        return Respond(await _results.DeleteAsync(UserId, id));
     }
 
     /// <summary>Retrieves a single result (the owner Participant or the managing Organiser only).</summary>
     /// <response code="200">Result details.</response>
+    /// <response code="401">Not logged in.</response>
     /// <response code="403">This result is not yours / not for an event you manage.</response>
     /// <response code="404">Result not found.</response>
     [HttpGet("results/{id:int}")]
     [ProducesResponseType(typeof(ResultResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ResultResponse>> GetResult(int id) => Ok(await _results.GetAsync(id));
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult> GetResult(int id)
+    {
+        var check = RequireLogin();
+        if (check != null) return check;
+
+        return Respond(await _results.GetAsync(UserId, Role, id));
+    }
 
     /// <summary>Retrieves the logged-in Participant's own results.</summary>
     /// <response code="200">List of the Participant's results.</response>
+    /// <response code="401">Not logged in.</response>
     /// <response code="403">The id is not your own, or you are not a Participant.</response>
     [HttpGet("participants/{id:int}/results")]
-    [Authorize(Roles = Roles.Participant)]
     [ProducesResponseType(typeof(List<ResultResponse>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<List<ResultResponse>>> GetParticipantResults(int id) =>
-        Ok(await _results.ListForParticipantAsync(id));
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult> GetParticipantResults(int id)
+    {
+        var check = RequireRole(Roles.Participant) ?? RequireSelf(id);
+        if (check != null) return check;
+
+        return Respond(await _results.ListForParticipantAsync(id));
+    }
 
     /// <summary>Retrieves all results for an event the Organiser manages.</summary>
     /// <response code="200">List of results, ordered by position.</response>
+    /// <response code="401">Not logged in.</response>
     /// <response code="403">You do not manage this event, or you are not an Organiser.</response>
     /// <response code="404">Event not found.</response>
-    [HttpGet("events/{id:int}/results")]
-    [Authorize(Roles = Roles.Organiser)]
+    [HttpGet("events/{id:int}/results")] 
     [ProducesResponseType(typeof(List<ResultResponse>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<List<ResultResponse>>> GetEventResults(int id) =>
-        Ok(await _results.ListForEventAsync(id));
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult> GetEventResults(int id)
+    {
+        var check = RequireRole(Roles.Organiser);
+        if (check != null) return check;
+
+        return Respond(await _results.ListForEventAsync(UserId, id));
+    }
 }
