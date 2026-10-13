@@ -1,26 +1,26 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using RaceDay.Api.Authentication;
 using RaceDay.Api.Models;
+using RaceDay.Api.Services;
 
 namespace RaceDay.Api.Data;
 
 /// <summary>
 /// DEVELOPMENT ONLY. Re-creates the Part 1 sample data (2 Organisers, 2 Participants, 3 Events,
-/// categories, enrolments, results) with real password hashes so you can log in during the demo.
+/// categories, enrolments, results) with real password hashes (ASP.NET Core Identity hasher) so you can log in during the demo.
 /// Every seeded account uses the password in <see cref="DevPassword"/>. Never use this in production.
 /// </summary>
 public static class DbSeeder
 {
     public const string DevPassword = "RaceDay123";
 
-    public static async Task SeedAsync(RaceDayDbContext db, PasswordService passwords)
+    public static async Task SeedAsync(RaceDayDbContext db)
     {
         if (await db.Organisers.AnyAsync())
         {
             return; // already seeded
         }
 
-        var hash = passwords.Hash(DevPassword);
+        var hash = PasswordHelper.Hash(DevPassword);
 
         var sipho = new Organiser { FullName = "Sipho Mokoena", Email = "sipho.mokoena@raceday.co.za", PasswordHash = hash, PhoneNumber = "0821234567" };
         var lindiwe = new Organiser { FullName = "Lindiwe Dube", Email = "lindiwe.dube@raceday.co.za", PasswordHash = hash, PhoneNumber = "0837654321" };
