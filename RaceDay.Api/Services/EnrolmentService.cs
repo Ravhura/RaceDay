@@ -45,7 +45,7 @@ public class EnrolmentService
 
         var enrolment = new Enrolment
         {
-            ParticipantId = participantId, // the logged-in Participant, taken from the session
+            ParticipantId = participantId, // the logged in Participant, taken from the session
             EventId = ev.EventId,
             CategoryId = category.CategoryId,
             Status = EnrolmentStatuses.Confirmed

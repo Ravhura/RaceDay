@@ -67,7 +67,11 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+// In Development the MVC app (and Docker) call the API over plain HTTP, so only redirect to HTTPS elsewhere.
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 app.UseSession();   // turns on the server-side session for every request
 app.MapControllers();
 
