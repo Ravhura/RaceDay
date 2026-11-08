@@ -260,3 +260,34 @@ a {
     color: #b8c4d6;
     font-size: .85rem;
 }
+/* ---------- Organiser tables and empty states ---------- */
+.rd-thumb {
+    width: 84px;
+    height: 54px;
+    object-fit: cover;
+    border-radius: 8px;
+    display: block;
+}
+
+.rd-thumb-placeholder {
+    width: 84px;
+    height: 54px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 1.4rem;
+    background: linear-gradient(135deg, var(--rd-navy), var(--rd-orange));
+}
+
+.rd-empty {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #6b7a90;
+}
+
+    .rd-empty .bi {
+        font-size: 3rem;
+        color: var(--rd-orange);
+    }
