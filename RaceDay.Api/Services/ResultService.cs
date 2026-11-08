@@ -48,7 +48,7 @@ public class ResultService
         await _db.SaveChangesAsync();
 
         var saved = await Query().FirstAsync(r => r.ResultId == result.ResultId);
-        return ServiceResult<ResultResponse>.Created(ToResponse(saved));
+        return ServiceResult<ResultResponse>.Created(await MapOneAsync(saved));
     }
 
     public async Task<ServiceResult<ResultResponse>> UpdateAsync(int organiserId, int id, UpdateResultRequest request)
@@ -71,7 +71,7 @@ public class ResultService
         result.Position = request.Position;
         await _db.SaveChangesAsync();
 
-        return ServiceResult<ResultResponse>.Ok(ToResponse(result));
+        return ServiceResult<ResultResponse>.Ok(await MapOneAsync(result));
     }
 
     public async Task<ServiceResult<bool>> DeleteAsync(int organiserId, int id)
@@ -115,7 +115,7 @@ public class ResultService
         {
             return ServiceResult<ResultResponse>.Forbidden("You do not have access to this result.");
         }
-        return ServiceResult<ResultResponse>.Ok(ToResponse(result));
+        return ServiceResult<ResultResponse>.Ok(await MapOneAsync(result));
     }
 
     public async Task<ServiceResult<List<ResultResponse>>> ListForParticipantAsync(int participantId)
@@ -123,7 +123,7 @@ public class ResultService
         var list = await Query()
             .Where(r => r.Enrolment.ParticipantId == participantId)
             .ToListAsync();
-        return ServiceResult<List<ResultResponse>>.Ok(list.Select(ToResponse).ToList());
+        return ServiceResult<List<ResultResponse>>.Ok(await MapAsync(list));
     }
 
     public async Task<ServiceResult<List<ResultResponse>>> ListForEventAsync(int organiserId, int eventId)
@@ -142,7 +142,7 @@ public class ResultService
             .Where(r => r.Enrolment.EventId == eventId)
             .OrderBy(r => r.Position)
             .ToListAsync();
-        return ServiceResult<List<ResultResponse>>.Ok(list.Select(ToResponse).ToList());
+        return ServiceResult<List<ResultResponse>>.Ok(await MapAsync(list));
     }
 
     // The SQL TIME column only holds 00:00:00 to 23:59:59, so reject anything outside that.
@@ -159,7 +159,29 @@ public class ResultService
             .Include(r => r.Enrolment).ThenInclude(e => e.Category).ThenInclude(c => c.Event);
     }
 
-    private static ResultResponse ToResponse(Result r)
+    // Turns results into responses, counting how many results each event has (the number of finishers).
+    private async Task<List<ResultResponse>> MapAsync(List<Result> results)
+    {
+        var eventIds = results.Select(r => r.Enrolment.EventId).Distinct().ToList();
+
+        var finisherCounts = await _db.Results
+            .Where(r => eventIds.Contains(r.Enrolment.EventId))
+            .GroupBy(r => r.Enrolment.EventId)
+            .Select(g => new { EventId = g.Key, Total = g.Count() })
+            .ToDictionaryAsync(x => x.EventId, x => x.Total);
+
+        return results
+            .Select(r => ToResponse(r, finisherCounts.TryGetValue(r.Enrolment.EventId, out var total) ? total : 0))
+            .ToList();
+    }
+
+    private async Task<ResultResponse> MapOneAsync(Result result)
+    {
+        var list = await MapAsync(new List<Result> { result });
+        return list[0];
+    }
+
+    private static ResultResponse ToResponse(Result r, int totalFinishers)
     {
         return new ResultResponse
         {
@@ -171,7 +193,9 @@ public class ResultService
             EventName = r.Enrolment.Category.Event.EventName,
             CategoryName = r.Enrolment.Category.CategoryName,
             FinishTime = r.FinishTime,
-            Position = r.Position
+            Position = r.Position,
+            EventDate = r.Enrolment.Category.Event.EventDate,
+            TotalFinishers = totalFinishers
         };
     }
 }
