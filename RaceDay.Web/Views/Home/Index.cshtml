@@ -1,10 +1,71 @@
-﻿@{
-    ViewData["Title"] = "Home";
+﻿@model HomeViewModel
+@{
+    ViewData["Title"] = "Upcoming events";
     var name = Context.Session.GetString(SessionKeys.FullName);
-    var role = Context.Session.GetString(SessionKeys.Role);
 }
 
 <div class="rd-hero">
-    <h1>Welcome, @name</h1>
-    <p class="mb-0">You are logged in as <span class="badge rd-role-badge">@role</span>. Your pages are being built, so check back after the next step.</p>
+    <h1>Find your next race, @name</h1>
+    <p class="mb-0">Browse upcoming road running, walking and cycling events across South Africa and enter in a few clicks.</p>
 </div>
+
+<form method="get" asp-controller="Home" asp-action="Index" class="rd-card rd-filter p-3 mb-4">
+    <div class="row g-3 align-items-end">
+        <div class="col-md-4">
+            <label for="search" class="form-label mb-1">Search</label>
+            <input type="text" id="search" name="search" value="@Model.Search" class="form-control" placeholder="Event name or place" />
+        </div>
+        <div class="col-md-2">
+            <label for="type" class="form-label mb-1">Type</label>
+            <select id="type" name="type" class="form-select">
+                <option value="">All</option>
+                <option value="Run" selected="@(Model.Type == "Run")">Run</option>
+                <option value="Walk" selected="@(Model.Type == "Walk")">Walk</option>
+                <option value="Cycle" selected="@(Model.Type == "Cycle")">Cycle</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label for="dateFrom" class="form-label mb-1">From</label>
+            <input type="date" id="dateFrom" name="dateFrom" value="@(Model.DateFrom?.ToString("yyyy-MM-dd"))" class="form-control" />
+        </div>
+        <div class="col-md-2">
+            <label for="dateTo" class="form-label mb-1">To</label>
+            <input type="date" id="dateTo" name="dateTo" value="@(Model.DateTo?.ToString("yyyy-MM-dd"))" class="form-control" />
+        </div>
+        <div class="col-md-2 d-flex gap-2">
+            <button type="submit" class="btn btn-rd flex-grow-1"><i class="bi bi-funnel"></i> Filter</button>
+            @if (Model.HasFilters)
+            {
+                <a asp-action="Index" class="btn btn-outline-secondary" title="Clear filters"><i class="bi bi-x-lg"></i></a>
+            }
+        </div>
+    </div>
+</form>
+
+@if (!Model.Events.Any())
+{
+    <div class="rd-card rd-empty">
+        <i class="bi bi-calendar-x"></i>
+        @if (Model.HasFilters)
+        {
+            <p class="mt-2 mb-3">No upcoming events match your filters.</p>
+            <a asp-action="Index" class="btn btn-rd">Clear filters</a>
+        }
+        else
+        {
+            <p class="mt-2 mb-0">There are no upcoming events right now. Please check back soon.</p>
+        }
+    </div>
+}
+else
+{
+    <p class="text-muted">Showing @Model.Events.Count of @Model.TotalUpcoming upcoming event(s).</p>
+    <div class="row g-4">
+        @foreach (var ev in Model.Events)
+        {
+            <div class="col-md-6 col-lg-4">
+                <partial name="_EventCard" model="ev" />
+            </div>
+        }
+    </div>
+}

@@ -1,0 +1,93 @@
+﻿@model EventPageViewModel
+@{
+    ViewData["Title"] = Model.Event.EventName;
+    var ev = Model.Event;
+    var enrolledIds = Model.MyEnrolments.Select(e => e.CategoryId).ToHashSet();
+    var available = Model.Categories.Where(c => !enrolledIds.Contains(c.CategoryId)).ToList();
+}
+
+<a asp-controller="Home" asp-action="Index" class="text-decoration-none"><i class="bi bi-arrow-left"></i> Back to events</a>
+
+<div class="row g-4 mt-1">
+    <div class="col-lg-7">
+        @if (!string.IsNullOrEmpty(ev.BannerUrl))
+        {
+            <img src="@ev.BannerUrl" alt="Banner for @ev.EventName" class="rd-event-detail-banner mb-3" />
+        }
+        else
+        {
+            <div class="rd-banner-placeholder mb-3" style="height:220px;border-radius:14px;"><i class="bi @Format.TypeIcon(ev.EventType)"></i></div>
+        }
+
+        <h1 class="rd-page-title">@ev.EventName</h1>
+        <p class="lead">@ev.Description</p>
+
+        <div class="rd-card p-4 mb-3">
+            <h2 class="h5 rd-page-title">Event information</h2>
+            <ul class="list-unstyled mb-0">
+                <li class="mb-2"><i class="bi bi-calendar-event text-warning"></i> <strong>Date:</strong> @Format.Date(ev.EventDate) (@Format.DaysUntil(ev.EventDate))</li>
+                <li class="mb-2"><i class="bi bi-geo-alt text-warning"></i> <strong>Location:</strong> @ev.Location</li>
+                <li class="mb-2"><i class="bi @Format.TypeIcon(ev.EventType) text-warning"></i> <strong>Type:</strong> @ev.EventType</li>
+                <li><i class="bi bi-signpost-split text-warning"></i> <strong>Distance:</strong> @ev.DistanceKm km</li>
+            </ul>
+        </div>
+
+        @if (Model.MyEnrolments.Any())
+        {
+            <div class="rd-card p-4">
+                <h2 class="h5 rd-page-title">Your entries</h2>
+                @foreach (var e in Model.MyEnrolments)
+                {
+                    <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                        <span><i class="bi bi-check-circle text-success"></i> @e.CategoryName</span>
+                        <partial name="_StatusBadge" model="e.Status" />
+                    </div>
+                }
+                <a asp-controller="Participant" asp-action="Enrolments" class="btn btn-sm btn-outline-rd mt-3">See all my enrolments</a>
+            </div>
+        }
+    </div>
+
+    <div class="col-lg-5">
+        <div class="rd-card p-4">
+            <h2 class="h5 rd-page-title">Enter this event</h2>
+
+            @if (!Model.IsUpcoming)
+            {
+                <div class="alert alert-secondary mb-0">This event has already taken place, so entries are closed.</div>
+            }
+            else if (!Model.Categories.Any())
+            {
+                <div class="alert alert-warning mb-0">The organiser has not added any categories yet. Please check back soon.</div>
+            }
+            else if (!available.Any())
+            {
+                <div class="alert alert-success mb-0">You are already entered in every category of this event.</div>
+            }
+            else
+            {
+                <p class="text-muted">Choose a category, then enter.</p>
+                <form asp-action="Enrol" method="post">
+                    <input type="hidden" name="eventId" value="@ev.EventId" />
+
+                    @foreach (var c in available)
+                    {
+                        <input type="radio" class="btn-check" name="categoryId" id="cat@(c.CategoryId)" value="@c.CategoryId" />
+                        <label class="rd-cat-option" for="cat@(c.CategoryId)">
+                            <span class="d-flex justify-content-between">
+                                <span class="fw-semibold">@c.CategoryName</span>
+                                <span class="fw-bold">@Format.Money(c.EntryFee)</span>
+                            </span>
+                            @if (c.DistanceKm.HasValue)
+                            {
+                                <span class="small text-muted">@c.DistanceKm km</span>
+                            }
+                        </label>
+                    }
+
+                    <button type="submit" class="btn btn-rd w-100 py-2 mt-2"><i class="bi bi-flag-fill"></i> Enter this event</button>
+                </form>
+            }
+        </div>
+    </div>
+</div>
