@@ -1,0 +1,12 @@
+﻿@model string
+@{
+    ViewData["Title"] = "Something went wrong";
+}
+
+<div class="text-center py-5">
+    <div class="display-4 text-danger"><i class="bi bi-exclamation-octagon"></i></div>
+    <h1 class="rd-page-title">We hit a problem</h1>
+    <p class="text-muted">@Model</p>
+    <a href="javascript:history.back()" class="btn btn-outline-rd me-2">Go back</a>
+    <a asp-controller="Home" asp-action="Index" class="btn btn-rd">Home</a>
+</div>
