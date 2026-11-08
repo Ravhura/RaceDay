@@ -32,4 +32,10 @@ public class ResultResponse
     public string CategoryName { get; set; } = string.Empty;
     public TimeSpan? FinishTime { get; set; }
     public int? Position { get; set; }
+
+    /// <summary>The date of the event the result belongs to.</summary>
+    public DateOnly EventDate { get; set; }
+
+    /// <summary>How many results have been captured for this event, so "2nd of 12 finishers" can be shown.</summary>
+    public int TotalFinishers { get; set; }
 }
