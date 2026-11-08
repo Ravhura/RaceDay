@@ -1,32 +1,14 @@
-using Microsoft.AspNetCore.Mvc;
-using RaceDay.Web.Models;
-using System.Diagnostics;
+﻿using Microsoft.AspNetCore.Mvc;
 
-namespace RaceDay.Web.Controllers
+namespace RaceDay.Web.Controllers;
+
+public class HomeController : AppController
 {
-    public class HomeController : Controller
+    public IActionResult Index()
     {
-        private readonly ILogger<HomeController> _logger;
-
-        public HomeController(ILogger<HomeController> logger)
-        {
-            _logger = logger;
-        }
-
-        public IActionResult Index()
-        {
-            return View();
-        }
-
-        public IActionResult Privacy()
-        {
-            return View();
-        }
-
-        [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
-        public IActionResult Error()
-        {
-            return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
-        }
+        if (!IsLoggedIn) return RedirectToAction("Login", "Account");
+        return View();
     }
+
+    public IActionResult Error() => View();
 }
