@@ -1,0 +1,64 @@
+﻿@model List<MyEnrolmentRow>
+@{
+    ViewData["Title"] = "My Enrolments";
+    var today = DateOnly.FromDateTime(DateTime.Today);
+}
+
+<h1 class="rd-page-title mb-3">My Enrolments</h1>
+
+@if (!Model.Any())
+{
+    <div class="rd-card rd-empty">
+        <i class="bi bi-ticket-perforated"></i>
+        <p class="mt-2 mb-3">You have not entered any events yet.</p>
+        <a asp-controller="Home" asp-action="Index" class="btn btn-rd">Find an event</a>
+    </div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table rd-table mb-0">
+            <thead>
+                <tr><th>Event</th><th>Date</th><th>Category</th><th>Status</th><th>Entered on</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Model)
+                {
+                    var isUpcoming = row.Event != null && row.Event.EventDate >= today;
+                    <tr>
+                        <td>
+                            <a asp-controller="Events" asp-action="Details" asp-route-id="@row.Enrolment.EventId" class="fw-semibold text-decoration-none">@row.Enrolment.EventName</a>
+                            @if (row.Event != null)
+                            {
+                                <div class="small text-muted"><i class="bi bi-geo-alt"></i> @row.Event.Location</div>
+                            }
+                        </td>
+                        <td>
+                            @if (row.Event != null)
+                            {
+                                @Format.Date(row.Event.EventDate)
+                                <div class="small text-muted">@(isUpcoming ? Format.DaysUntil(row.Event.EventDate) : "Completed")</div>
+                            }
+                            else
+                            {
+                                <span>-</span>
+                            }
+                        </td>
+                        <td>@row.Enrolment.CategoryName</td>
+                        <td><partial name="_StatusBadge" model="row.Enrolment.Status" /></td>
+                        <td>@row.Enrolment.EnrolmentDate.ToString("dd MMM yyyy")</td>
+                        <td class="text-end">
+                            @if (isUpcoming)
+                            {
+                                <form asp-controller="Participant" asp-action="CancelEnrolment" asp-route-id="@row.Enrolment.EnrolmentId" method="post" class="d-inline"
+                                      onsubmit="return confirm('Cancel this enrolment?');">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-x-circle"></i> Cancel</button>
+                                </form>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
