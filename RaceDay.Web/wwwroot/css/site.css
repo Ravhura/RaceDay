@@ -291,3 +291,39 @@ a {
         font-size: 3rem;
         color: var(--rd-orange);
     }
+
+/* ---------- Participant pages ---------- */
+.rd-filter label {
+    font-weight: 500;
+    font-size: .85rem;
+    color: #6b7a90;
+}
+
+.rd-cat-option {
+    display: block;
+    border: 2px solid #e3e8f0;
+    border-radius: 12px;
+    padding: .8rem 1rem;
+    cursor: pointer;
+    margin-bottom: .6rem;
+    background: #fff;
+    transition: border-color .15s, background .15s;
+}
+
+    .rd-cat-option:hover {
+        border-color: var(--rd-orange);
+    }
+
+.btn-check:checked + .rd-cat-option {
+    border-color: var(--rd-orange);
+    background: #fff5ee;
+}
+
+.rd-position {
+    font-weight: 700;
+    color: var(--rd-navy);
+}
+
+.rd-medal {
+    color: #d4a017;
+}
