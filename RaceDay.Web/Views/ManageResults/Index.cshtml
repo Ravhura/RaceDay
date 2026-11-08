@@ -1,0 +1,57 @@
+﻿@model ManageResultsViewModel
+@{
+    ViewData["Title"] = "Results";
+    var today = DateOnly.FromDateTime(DateTime.Today);
+}
+
+<a asp-controller="ManageEvents" asp-action="Details" asp-route-id="@Model.Event.EventId" class="text-decoration-none"><i class="bi bi-arrow-left"></i> Back to @Model.Event.EventName</a>
+
+<h1 class="rd-page-title my-3">Results <small class="text-muted fs-5">@Model.Event.EventName</small></h1>
+
+@if (Model.Event.EventDate > today)
+{
+    <div class="alert alert-info"><i class="bi bi-info-circle"></i> This event takes place on @Format.Date(Model.Event.EventDate). Results are normally entered after the event.</div>
+}
+<p class="text-muted">Results you save here are visible to the participant straight away.</p>
+
+@if (!Model.Rows.Any())
+{
+    <div class="rd-card rd-empty">
+        <i class="bi bi-trophy"></i>
+        <p class="mt-2 mb-0">Nobody has enrolled for this event, so there is nothing to capture.</p>
+    </div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table rd-table mb-0">
+            <thead><tr><th>Participant</th><th>Category</th><th>Status</th><th>Finish time</th><th>Position</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var row in Model.Rows)
+                {
+                    <tr>
+                        <td class="fw-semibold">@row.Enrolment.ParticipantName</td>
+                        <td>@row.Enrolment.CategoryName</td>
+                        <td><partial name="_StatusBadge" model="row.Enrolment.Status" /></td>
+                        <td>@(row.Result != null ? Format.Time(row.Result.FinishTime) : "Not captured")</td>
+                        <td>@(row.Result != null ? Format.Ordinal(row.Result.Position) : "-")</td>
+                        <td class="text-end text-nowrap">
+                            @if (row.Result == null)
+                            {
+                                <a asp-action="Edit" asp-route-eventId="@Model.Event.EventId" asp-route-enrolmentId="@row.Enrolment.EnrolmentId" class="btn btn-sm btn-rd"><i class="bi bi-plus-lg"></i> Enter result</a>
+                            }
+                            else
+                            {
+                                <a asp-action="Edit" asp-route-eventId="@Model.Event.EventId" asp-route-enrolmentId="@row.Enrolment.EnrolmentId" class="btn btn-sm btn-outline-rd"><i class="bi bi-pencil"></i> Edit</a>
+                                <form asp-action="Delete" asp-route-id="@row.Result.ResultId" asp-route-eventId="@Model.Event.EventId" method="post" class="d-inline"
+                                      onsubmit="return confirm('Delete this result?');">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                </form>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

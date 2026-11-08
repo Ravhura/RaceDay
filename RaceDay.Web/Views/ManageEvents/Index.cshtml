@@ -1,0 +1,62 @@
+﻿@model List<DashboardEventRow>
+@{
+    ViewData["Title"] = "My Events";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="rd-page-title mb-0">My Events</h1>
+    <a asp-action="Create" class="btn btn-rd"><i class="bi bi-plus-lg"></i> Create event</a>
+</div>
+
+@if (!Model.Any())
+{
+    <div class="rd-card rd-empty">
+        <i class="bi bi-flag"></i>
+        <p class="mt-2 mb-3">You have not created any events yet.</p>
+        <a asp-action="Create" class="btn btn-rd">Create your first event</a>
+    </div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table rd-table mb-0">
+            <thead>
+                <tr><th></th><th>Event</th><th>Date</th><th>Location</th><th class="text-center">Enrolments</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Model)
+                {
+                    <tr>
+                        <td>
+                            @if (!string.IsNullOrEmpty(row.Event.BannerUrl))
+                            {
+                                <img src="@row.Event.BannerUrl" alt="Banner for @row.Event.EventName" class="rd-thumb" />
+                            }
+                            else
+                            {
+                                <div class="rd-thumb-placeholder"><i class="bi @Format.TypeIcon(row.Event.EventType)"></i></div>
+                            }
+                        </td>
+                        <td>
+                            <a asp-action="Details" asp-route-id="@row.Event.EventId" class="fw-semibold text-decoration-none">@row.Event.EventName</a>
+                            <div class="small text-muted"><i class="bi @Format.TypeIcon(row.Event.EventType)"></i> @row.Event.EventType &middot; @row.Event.DistanceKm km</div>
+                        </td>
+                        <td>@Format.Date(row.Event.EventDate)</td>
+                        <td>@row.Event.Location</td>
+                        <td class="text-center fw-bold">@row.Enrolments</td>
+                        <td class="text-end text-nowrap">
+                            <a asp-action="Edit" asp-route-id="@row.Event.EventId" class="btn btn-sm btn-outline-rd" title="Edit"><i class="bi bi-pencil"></i></a>
+                            <a asp-controller="ManageCategories" asp-action="Index" asp-route-eventId="@row.Event.EventId" class="btn btn-sm btn-outline-rd" title="Categories"><i class="bi bi-tags"></i></a>
+                            <a asp-controller="ManageEnrolments" asp-action="Index" asp-route-eventId="@row.Event.EventId" class="btn btn-sm btn-outline-rd" title="Enrolments"><i class="bi bi-people"></i></a>
+                            <a asp-controller="ManageResults" asp-action="Index" asp-route-eventId="@row.Event.EventId" class="btn btn-sm btn-outline-rd" title="Results"><i class="bi bi-trophy"></i></a>
+                            <form asp-action="Delete" asp-route-id="@row.Event.EventId" method="post" class="d-inline"
+                                  onsubmit="return confirm('Delete the event @row.Event.EventName.Replace("'", ""))? This cannot be undone.');">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

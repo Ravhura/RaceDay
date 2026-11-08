@@ -1,0 +1,45 @@
+﻿@model ManageCategoriesViewModel
+@{
+    ViewData["Title"] = "Categories";
+}
+
+<a asp-controller="ManageEvents" asp-action="Details" asp-route-id="@Model.Event.EventId" class="text-decoration-none"><i class="bi bi-arrow-left"></i> Back to @Model.Event.EventName</a>
+
+<div class="d-flex justify-content-between align-items-center my-3">
+    <h1 class="rd-page-title mb-0">Categories <small class="text-muted fs-5">@Model.Event.EventName</small></h1>
+    <a asp-action="Create" asp-route-eventId="@Model.Event.EventId" class="btn btn-rd"><i class="bi bi-plus-lg"></i> Add category</a>
+</div>
+
+@if (!Model.Categories.Any())
+{
+    <div class="rd-card rd-empty">
+        <i class="bi bi-tags"></i>
+        <p class="mt-2 mb-3">No categories yet. Add age or distance categories such as "Under 20", "10km" or "21km".</p>
+        <a asp-action="Create" asp-route-eventId="@Model.Event.EventId" class="btn btn-rd">Add a category</a>
+    </div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table rd-table mb-0">
+            <thead><tr><th>Category</th><th>Distance</th><th>Entry fee</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var c in Model.Categories)
+                {
+                    <tr>
+                        <td class="fw-semibold">@c.CategoryName</td>
+                        <td>@(c.DistanceKm.HasValue ? c.DistanceKm + " km" : "-")</td>
+                        <td>@Format.Money(c.EntryFee)</td>
+                        <td class="text-end text-nowrap">
+                            <a asp-action="Edit" asp-route-id="@c.CategoryId" class="btn btn-sm btn-outline-rd"><i class="bi bi-pencil"></i> Edit</a>
+                            <form asp-action="Delete" asp-route-id="@c.CategoryId" asp-route-eventId="@Model.Event.EventId" method="post" class="d-inline"
+                                  onsubmit="return confirm('Delete this category? This cannot be undone.');">
+                                <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

@@ -1,0 +1,26 @@
+﻿@model CategoryFormViewModel
+
+<div asp-validation-summary="ModelOnly" class="alert alert-danger"></div>
+
+<input type="hidden" asp-for="CategoryId" />
+<input type="hidden" asp-for="EventId" />
+<input type="hidden" asp-for="EventName" />
+
+<div class="mb-3">
+    <label asp-for="CategoryName" class="form-label"></label>
+    <input asp-for="CategoryName" class="form-control" placeholder="For example: Under 20, Senior, 10km" />
+    <span asp-validation-for="CategoryName" class="text-danger"></span>
+</div>
+
+<div class="row">
+    <div class="col-md-6 mb-3">
+        <label asp-for="DistanceKm" class="form-label"></label>
+        <input asp-for="DistanceKm" type="number" step="0.01" min="0.01" class="form-control" />
+        <span asp-validation-for="DistanceKm" class="text-danger"></span>
+    </div>
+    <div class="col-md-6 mb-3">
+        <label asp-for="EntryFee" class="form-label"></label>
+        <input asp-for="EntryFee" type="number" step="0.01" min="0" class="form-control" />
+        <span asp-validation-for="EntryFee" class="text-danger"></span>
+    </div>
+</div>

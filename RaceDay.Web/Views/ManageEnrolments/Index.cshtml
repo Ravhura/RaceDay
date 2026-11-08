@@ -1,0 +1,39 @@
+﻿@model ManageEnrolmentsViewModel
+@{
+    ViewData["Title"] = "Enrolments";
+}
+
+<a asp-controller="ManageEvents" asp-action="Details" asp-route-id="@Model.Event.EventId" class="text-decoration-none"><i class="bi bi-arrow-left"></i> Back to @Model.Event.EventName</a>
+
+<div class="d-flex justify-content-between align-items-center my-3">
+    <h1 class="rd-page-title mb-0">Enrolments <small class="text-muted fs-5">@Model.Event.EventName</small></h1>
+    <a asp-controller="ManageResults" asp-action="Index" asp-route-eventId="@Model.Event.EventId" class="btn btn-rd"><i class="bi bi-trophy"></i> Enter results</a>
+</div>
+
+@if (!Model.Enrolments.Any())
+{
+    <div class="rd-card rd-empty">
+        <i class="bi bi-people"></i>
+        <p class="mt-2 mb-0">Nobody has enrolled for this event yet.</p>
+    </div>
+}
+else
+{
+    <p class="text-muted">@Model.Enrolments.Count participant(s) enrolled.</p>
+    <div class="table-responsive">
+        <table class="table rd-table mb-0">
+            <thead><tr><th>Participant</th><th>Category</th><th>Enrolled on</th><th>Status</th></tr></thead>
+            <tbody>
+                @foreach (var e in Model.Enrolments)
+                {
+                    <tr>
+                        <td class="fw-semibold">@e.ParticipantName</td>
+                        <td>@e.CategoryName</td>
+                        <td>@e.EnrolmentDate.ToString("dd MMM yyyy")</td>
+                        <td><partial name="_StatusBadge" model="e.Status" /></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

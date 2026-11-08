@@ -1,0 +1,28 @@
+﻿@model EventFormViewModel
+@{
+    ViewData["Title"] = "Edit event";
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="rd-card p-4">
+            <h2 class="rd-page-title">Edit event</h2>
+            <form asp-action="Edit" method="post" enctype="multipart/form-data" novalidate>
+                <partial name="_EventForm" model="Model" />
+                <div class="d-flex gap-2 mt-4">
+                    <button type="submit" class="btn btn-rd">Save changes</button>
+                    <a asp-action="Details" asp-route-id="@Model.EventId" class="btn btn-outline-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}namespace RaceDay.Web.Views.ManageEvents
+{
+    public class Edit
+    {
+    }
+}

@@ -1,0 +1,70 @@
+﻿@model EventDetailsViewModel
+@{
+    ViewData["Title"] = Model.Event.EventName;
+    var ev = Model.Event;
+}
+
+<a asp-action="Index" class="text-decoration-none"><i class="bi bi-arrow-left"></i> Back to my events</a>
+
+<div class="row g-4 mt-1">
+    <div class="col-lg-8">
+        @if (!string.IsNullOrEmpty(ev.BannerUrl))
+        {
+            <img src="@ev.BannerUrl" alt="Banner for @ev.EventName" class="rd-event-detail-banner mb-3" />
+        }
+        else
+        {
+            <div class="rd-banner-placeholder mb-3" style="height:220px;border-radius:14px;"><i class="bi @Format.TypeIcon(ev.EventType)"></i></div>
+        }
+        <h1 class="rd-page-title">@ev.EventName</h1>
+        <p class="lead">@ev.Description</p>
+
+        <div class="d-flex flex-wrap gap-2 mb-4">
+            <a asp-action="Edit" asp-route-id="@ev.EventId" class="btn btn-rd"><i class="bi bi-pencil"></i> Edit event</a>
+            <a asp-controller="ManageCategories" asp-action="Index" asp-route-eventId="@ev.EventId" class="btn btn-outline-rd"><i class="bi bi-tags"></i> Categories</a>
+            <a asp-controller="ManageEnrolments" asp-action="Index" asp-route-eventId="@ev.EventId" class="btn btn-outline-rd"><i class="bi bi-people"></i> Enrolments</a>
+            <a asp-controller="ManageResults" asp-action="Index" asp-route-eventId="@ev.EventId" class="btn btn-outline-rd"><i class="bi bi-trophy"></i> Results</a>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="rd-card p-4">
+            <h2 class="h5 rd-page-title">Event details</h2>
+            <ul class="list-unstyled mb-0">
+                <li class="mb-2"><i class="bi bi-calendar-event text-warning"></i> <strong>Date:</strong> @Format.Date(ev.EventDate)</li>
+                <li class="mb-2"><i class="bi bi-geo-alt text-warning"></i> <strong>Location:</strong> @ev.Location</li>
+                <li class="mb-2"><i class="bi @Format.TypeIcon(ev.EventType) text-warning"></i> <strong>Type:</strong> @ev.EventType</li>
+                <li class="mb-2"><i class="bi bi-signpost-split text-warning"></i> <strong>Distance:</strong> @ev.DistanceKm km</li>
+                <li class="mb-2"><i class="bi bi-people text-warning"></i> <strong>Enrolments:</strong> @Model.EnrolmentCount</li>
+                <li><i class="bi bi-flag text-warning"></i> <strong>Status:</strong> @ev.Status</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<h2 class="h4 rd-page-title mt-4 mb-3">Categories</h2>
+@if (!Model.Categories.Any())
+{
+    <div class="rd-card rd-empty">
+        <p class="mb-3">No categories yet. Participants need a category to enter this event.</p>
+        <a asp-controller="ManageCategories" asp-action="Create" asp-route-eventId="@ev.EventId" class="btn btn-rd">Add a category</a>
+    </div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table rd-table mb-0">
+            <thead><tr><th>Category</th><th>Distance</th><th>Entry fee</th></tr></thead>
+            <tbody>
+                @foreach (var c in Model.Categories)
+                {
+                    <tr>
+                        <td class="fw-semibold">@c.CategoryName</td>
+                        <td>@(c.DistanceKm.HasValue ? c.DistanceKm + " km" : "-")</td>
+                        <td>@Format.Money(c.EntryFee)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

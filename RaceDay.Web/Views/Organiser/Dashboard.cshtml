@@ -1,0 +1,99 @@
+﻿@model DashboardViewModel
+@{
+    ViewData["Title"] = "Dashboard";
+    var today = DateOnly.FromDateTime(DateTime.Today);
+    var upcoming = Model.Events.Where(r => r.Event.EventDate >= today).OrderBy(r => r.Event.EventDate).ToList();
+    var past = Model.Events.Where(r => r.Event.EventDate < today).OrderByDescending(r => r.Event.EventDate).ToList();
+    var name = Context.Session.GetString(SessionKeys.FullName);
+}
+
+<div class="rd-hero">
+    <h1>Welcome back, @name</h1>
+    <p class="mb-3">Here is how your events are doing.</p>
+    <a asp-controller="ManageEvents" asp-action="Create" class="btn btn-rd"><i class="bi bi-plus-lg"></i> Create a new event</a>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+        <div class="rd-stat"><div class="rd-stat-number">@Model.Events.Count</div><div class="rd-stat-label">Events created</div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="rd-stat"><div class="rd-stat-number">@Model.TotalEnrolments</div><div class="rd-stat-label">Total enrolments</div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="rd-stat"><div class="rd-stat-number">@upcoming.Count</div><div class="rd-stat-label">Upcoming events</div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="rd-stat">
+            <div class="rd-stat-number fs-4">@(upcoming.Any() ? Format.Date(upcoming[0].Event.EventDate) : "None yet")</div>
+            <div class="rd-stat-label">Next event date</div>
+        </div>
+    </div>
+</div>
+
+<h2 class="h4 rd-page-title mb-3">Upcoming events</h2>
+@if (!upcoming.Any())
+{
+    <div class="rd-card rd-empty mb-4">
+        <i class="bi bi-calendar-plus"></i>
+        <p class="mt-2 mb-3">You have no upcoming events. Create one to start taking enrolments.</p>
+        <a asp-controller="ManageEvents" asp-action="Create" class="btn btn-rd">Create an event</a>
+    </div>
+}
+else
+{
+    <div class="table-responsive mb-4">
+        <table class="table rd-table mb-0">
+            <thead>
+                <tr><th>Event</th><th>Date</th><th>When</th><th>Location</th><th class="text-center">Enrolments</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var row in upcoming)
+                {
+                    <tr>
+                        <td>
+                            <a asp-controller="ManageEvents" asp-action="Details" asp-route-id="@row.Event.EventId" class="fw-semibold text-decoration-none">@row.Event.EventName</a>
+                            <div class="small text-muted"><i class="bi @Format.TypeIcon(row.Event.EventType)"></i> @row.Event.EventType &middot; @row.Event.DistanceKm km</div>
+                        </td>
+                        <td>@Format.Date(row.Event.EventDate)</td>
+                        <td><span class="badge rd-type-badge">@Format.DaysUntil(row.Event.EventDate)</span></td>
+                        <td>@row.Event.Location</td>
+                        <td class="text-center fw-bold">@row.Enrolments</td>
+                        <td class="text-end">
+                            <a asp-controller="ManageEnrolments" asp-action="Index" asp-route-eventId="@row.Event.EventId" class="btn btn-sm btn-outline-rd">Enrolments</a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@if (past.Any())
+{
+    <h2 class="h4 rd-page-title mb-3">Past events</h2>
+    <div class="table-responsive">
+        <table class="table rd-table mb-0">
+            <thead>
+                <tr><th>Event</th><th>Date</th><th>Location</th><th class="text-center">Enrolments</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var row in past)
+                {
+                    <tr>
+                        <td>
+                            <a asp-controller="ManageEvents" asp-action="Details" asp-route-id="@row.Event.EventId" class="fw-semibold text-decoration-none">@row.Event.EventName</a>
+                            <div class="small text-muted"><i class="bi @Format.TypeIcon(row.Event.EventType)"></i> @row.Event.EventType</div>
+                        </td>
+                        <td>@Format.Date(row.Event.EventDate)</td>
+                        <td>@row.Event.Location</td>
+                        <td class="text-center fw-bold">@row.Enrolments</td>
+                        <td class="text-end">
+                            <a asp-controller="ManageResults" asp-action="Index" asp-route-eventId="@row.Event.EventId" class="btn btn-sm btn-rd"><i class="bi bi-trophy"></i> Results</a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
