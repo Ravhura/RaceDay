@@ -1,0 +1,23 @@
+﻿@model EventItem
+
+<div class="rd-event-card d-flex flex-column">
+    @if (!string.IsNullOrEmpty(Model.BannerUrl))
+    {
+        <img src="@Model.BannerUrl" alt="Banner for @Model.EventName" class="rd-event-banner" />
+    }
+    else
+    {
+        <div class="rd-banner-placeholder"><i class="bi @Format.TypeIcon(Model.EventType)"></i></div>
+    }
+
+    <div class="p-3 d-flex flex-column flex-grow-1">
+        <div class="mb-2">
+            <span class="badge rd-type-badge"><i class="bi @Format.TypeIcon(Model.EventType)"></i> @Model.EventType</span>
+            <span class="badge bg-light text-dark border">@Model.DistanceKm km</span>
+        </div>
+        <h3 class="h5 rd-page-title">@Model.EventName</h3>
+        <div class="text-muted small mb-1"><i class="bi bi-calendar-event text-warning"></i> @Format.Date(Model.EventDate) &middot; @Format.DaysUntil(Model.EventDate)</div>
+        <div class="text-muted small mb-3"><i class="bi bi-geo-alt text-warning"></i> @Model.Location</div>
+        <a asp-controller="Events" asp-action="Details" asp-route-id="@Model.EventId" class="btn btn-rd mt-auto">View and enter</a>
+    </div>
+</div>
