@@ -26,6 +26,9 @@ public class EventConfiguration : IEntityTypeConfiguration<Event>
         builder.Property(e => e.EventType).HasConversion<string>().IsRequired()
                .HasMaxLength(10).IsUnicode(false);
 
+        // Part 3 addition: the address of the banner image in Azure Blob Storage (optional).
+        builder.Property(e => e.BannerUrl).HasMaxLength(500);
+
         // Part 1 has no cascade: an Organiser cannot be deleted while it owns Events.
         builder.HasOne(e => e.Organiser)
                .WithMany(o => o.Events)
