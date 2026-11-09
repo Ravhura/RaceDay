@@ -1,0 +1,13 @@
+services:
+  raceday-web:
+    build:
+      context: ./RaceDay.Web
+    image: raceday-web
+    container_name: raceday-web
+    ports:
+      - "8080:8080"
+    environment:
+      # The API runs on the host computer (started from Visual Studio) on port 5100.
+      - ApiBaseUrl=http://host.docker.internal:5100
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
