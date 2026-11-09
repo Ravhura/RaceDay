@@ -27,6 +27,8 @@ builder.Services.AddScoped<EventService>();
 builder.Services.AddScoped<CategoryService>();
 builder.Services.AddScoped<EnrolmentService>();
 builder.Services.AddScoped<ResultService>();
+builder.Services.AddSingleton<IBlobStorageService, BlobStorageService>();
+builder.Services.AddScoped<BannerService>();
 
 builder.Services.AddControllers();
 
