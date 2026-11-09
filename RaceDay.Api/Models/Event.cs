@@ -2,7 +2,7 @@
 
 /// <summary>
 /// A race event managed by one Organiser (Part 1 table: Events).
-/// Description, DistanceKm and EventType are the additive Part 2 fields.
+/// Description, DistanceKm and EventType are the Part 2 fields. BannerUrl is the Part 3 field.
 /// </summary>
 public class Event
 {
@@ -15,6 +15,9 @@ public class Event
     public decimal DistanceKm { get; set; }
     public EventType EventType { get; set; }
     public string Status { get; set; } = EventStatuses.Upcoming;
+
+    /// <summary>Public Azure Blob Storage address of the event banner (null until one is uploaded).</summary>
+    public string? BannerUrl { get; set; }
 
     public Organiser Organiser { get; set; } = null!;
     public ICollection<Category> Categories { get; set; } = new List<Category>();
