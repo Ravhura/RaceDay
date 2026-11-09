@@ -120,7 +120,7 @@ public class EventService
         return ServiceResult<bool>.NoContent();
     }
 
-    private static EventResponse ToResponse(Event e)
+    public static EventResponse ToResponse(Event e)
     {
         return new EventResponse
         {
@@ -132,7 +132,8 @@ public class EventService
             Location = e.Location,
             DistanceKm = e.DistanceKm,
             EventType = e.EventType,
-            Status = e.Status
+            Status = e.Status,
+            BannerUrl = e.BannerUrl
         };
     }
 }
