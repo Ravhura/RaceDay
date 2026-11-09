@@ -5,7 +5,28 @@ on:
   pull_request:
 
 jobs:
+  validate-structure:
+    name: Validate repository structure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Check that the required files and folders exist
+        run: |
+          test -n "$(find . -maxdepth 1 -iname 'readme.md')" || { echo "README.md is missing"; exit 1; }
+          test -n "$(find . -maxdepth 1 -type d -iname 'docs')" || { echo "docs folder is missing"; exit 1; }
+          for path in RaceDay.Api/RaceDay.Api.csproj RaceDay.Web/RaceDay.Web.csproj RaceDay.Tests/RaceDay.Tests.csproj RaceDay.Web/Dockerfile .github/workflows/ci.yml; do
+            if [ ! -e "$path" ]; then
+              echo "Missing: $path"
+              exit 1
+            fi
+          done
+          echo "Repository structure is valid."
+
   build-and-test:
+    name: Build and run unit tests
+    needs: validate-structure
     runs-on: ubuntu-latest
     steps:
       - name: Check out the code
@@ -16,11 +37,24 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Restore packages
-        run: dotnet restore RaceDay.Tests/RaceDay.Tests.csproj
+      - name: Restore, build and test the API
+        run: |
+          dotnet restore RaceDay.Tests/RaceDay.Tests.csproj
+          dotnet build RaceDay.Tests/RaceDay.Tests.csproj --no-restore --configuration Release
+          dotnet test RaceDay.Tests/RaceDay.Tests.csproj --no-build --configuration Release --verbosity normal
 
-      - name: Build
-        run: dotnet build RaceDay.Tests/RaceDay.Tests.csproj --no-restore --configuration Release
+      - name: Restore and build the MVC project
+        run: |
+          dotnet restore RaceDay.Web/RaceDay.Web.csproj
+          dotnet build RaceDay.Web/RaceDay.Web.csproj --no-restore --configuration Release
 
-      - name: Run unit tests
-        run: dotnet test RaceDay.Tests/RaceDay.Tests.csproj --no-build --configuration Release --verbosity normal
+  docker-build:
+    name: Build the Docker image
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Build the MVC Docker image
+        run: docker build -t raceday-web ./RaceDay.Web
