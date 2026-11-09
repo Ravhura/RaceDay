@@ -39,4 +39,7 @@ public class EventResponse
     public decimal DistanceKm { get; set; }
     public EventType EventType { get; set; }
     public string Status { get; set; } = string.Empty;
+
+    /// <summary>The Azure Blob Storage address of the event banner, or null if none has been uploaded.</summary>
+    public string? BannerUrl { get; set; }
 }
